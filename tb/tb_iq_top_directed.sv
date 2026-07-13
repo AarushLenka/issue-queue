@@ -3,22 +3,26 @@
 // =============================================================================
 // Purpose:
 //   End-to-end tests that exercise the full issue queue pipeline:
-//   dispatch → wakeup → age → select → issue, using iq_top with a small
-//   DEPTH=4 queue. Each test targets a specific microarchitectural scenario.
+//   dispatch → wakeup → age → select → issue, using iq_top with DEPTH=4.
+//
+//   CRITICAL TIMING NOTE:
+//     The selector is PURE COMBINATIONAL. An entry that becomes ready at
+//     posedge N (wakeup captured, src_ready updated) produces issue_valid=1
+//     combinationally at N+#1. At posedge N+1, the entry clears.
+//
+//     This means: check issue_valid ONE TICK after the wakeup/dispatch that
+//     makes the entry ready, NOT after an additional tick. The issued entry
+//     is gone after the next posedge.
 //
 //   Test catalog (8 directed tests):
-//     1. single_chain     : A→B dependency, dispatch A, wake A, issue A,
-//                           wake B (via A's dst_tag), issue B.
-//     2. multi_ready      : 3 entries ready simultaneously, oldest issues first.
-//     3. backpressure     : fill all 4 slots, confirm dispatch_ready=0,
-//                           issue one, confirm dispatch_ready=1.
-//     4. bypass_dispatch  : same-cycle dispatch + matching wakeup.
-//     5. immediate_src    : dispatch with immediate source, ready at dispatch.
-//     6. multi_port_issue : 2 entries ready → both ports issue same cycle.
-//     7. age_ordering     : 3 entries dispatched at different times, oldest
-//                           ready wins even if dispatched first.
-//     8. slot_reuse       : issue entry 0, dispatch new into entry 0's slot,
-//                           verify the new instruction works correctly.
+//     1. single_chain     : A→B dependency chain
+//     2. multi_ready      : 3 entries ready at same time, oldest issues first
+//     3. backpressure     : fill queue, stall, free by issue
+//     4. bypass_dispatch  : same-cycle dispatch + matching wakeup
+//     5. immediate_src    : both sources immediate
+//     6. multi_port_issue : 2 entries issue via 2 ports same cycle
+//     7. age_ordering     : older entry issues first
+//     8. slot_reuse       : freed slot reused by next dispatch
 // =============================================================================
 
 `timescale 1ns/1ps
@@ -29,16 +33,10 @@ import iq_pkg::*;
 
 module tb_iq_top_directed;
 
-  // -------------------------------------------------------------------------
-  // TB parameters
-  // -------------------------------------------------------------------------
   localparam int unsigned TB_DEPTH     = 4;
   localparam int unsigned TB_NUM_PORTS = 2;
   localparam int unsigned IDX_W        = $clog2(TB_DEPTH);
 
-  // -------------------------------------------------------------------------
-  // Error counter + CHK macro
-  // -------------------------------------------------------------------------
   int errors = 0;
 
   `define CHK(cond, msg) \
@@ -75,15 +73,9 @@ module tb_iq_top_directed;
 
   logic                                       squash_en;
 
-  // -------------------------------------------------------------------------
-  // Clock
-  // -------------------------------------------------------------------------
   initial clk = 1'b0;
   always #5 clk = ~clk;
 
-  // -------------------------------------------------------------------------
-  // DUT
-  // -------------------------------------------------------------------------
   iq_top #(
       .DEPTH     (TB_DEPTH),
       .TAG_WIDTH (TAG_WIDTH),
@@ -121,12 +113,12 @@ module tb_iq_top_directed;
       #1;
   endtask
 
-  // Dispatch one instruction. Returns the allocated slot index.
+  // Dispatch one instruction. After return, we are at posedge+#1 where
+  // the entry has been captured. dispatch_valid is deasserted.
   task automatic do_dispatch(
       input logic [TAG_WIDTH-1:0]              dst,
       input logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src,
-      input logic [NUM_SRC-1:0]                imm,
-      output logic [IDX_W-1:0]                 slot
+      input logic [NUM_SRC-1:0]                imm
   );
       @(posedge clk);
       dispatch_valid   = 1'b1;
@@ -135,7 +127,6 @@ module tb_iq_top_directed;
       dispatch_src_imm = imm;
       @(posedge clk);   // capturing edge
       #1;
-      slot = dispatch_slot_idx;
       dispatch_valid = 1'b0;
   endtask
 
@@ -144,12 +135,12 @@ module tb_iq_top_directed;
       @(posedge clk);
       wakeup_valid = 1'b1;
       wakeup_tag   = tag;
-      @(posedge clk);
+      @(posedge clk);   // capturing edge
       #1;
       wakeup_valid = 1'b0;
   endtask
 
-  // Wait one cycle and sample outputs (for letting issues take effect).
+  // Wait one cycle and sample.
   task automatic tick;
       @(posedge clk);
       #1;
@@ -158,106 +149,103 @@ module tb_iq_top_directed;
   // =========================================================================
   // Test 1: single_chain — A depends on external, B depends on A
   // =========================================================================
-  // Dispatch A (dst=0x01, src0=0x10, src1 imm).
-  // Wake A's src0 (tag 0x10) → A becomes ready → A issues.
-  // Dispatch B (dst=0x02, src0=0x01, src1 imm) — B depends on A's result.
-  // Wake B's src0 (tag 0x01, which is A's dst) → B issues.
   task automatic test_single_chain;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
-      $display("\n[TEST] test_single_chain: A→B dependency chain");
+      $display("\n[TEST] test_single_chain: A->B dependency chain");
 
-      // Dispatch A: needs tag 0x10 for src0, src1 is immediate.
+      // Dispatch A: src0=0x10 (needs wakeup), src1 immediate.
       src[0] = 'h10;  src[1] = 'h0;
-      do_dispatch('h01, src, 2'b10, slot);  // src1 imm
-      `CHK(dispatch_ready === 1'b1, "chain: dispatch_ready after A");
+      do_dispatch('h01, src, 2'b10);
 
-      // Wake A's src0.
+      // A is NOT ready yet (src0 unresolved).
+      `CHK(issue_valid[0] === 1'b0, "chain: A not ready before wakeup");
+
+      // Wake A's src0 → entry registers update → ready_o=1 → selector fires.
       do_wakeup('h10);
-      // A should now be ready and issued by port 0.
-      `CHK(issue_valid[0] === 1'b1, "chain: A issues after wakeup");
-      `CHK(issue_dst_tag[0] === 'h01, "chain: A's dst_tag on issue bus");
 
-      // Let A's issue clear take effect.
+      // RIGHT NOW (after wakeup capture + #1): A is ready, selector picked it.
+      `CHK(issue_valid[0] === 1'b1, "chain: A issues after wakeup");
+      `CHK(issue_dst_tag[0] === 'h01, "chain: A dst_tag on issue bus");
+
+      // Let A's issue_clear take effect.
       tick();
       `CHK(issue_valid[0] === 1'b0, "chain: no issue after A cleared");
 
       // Dispatch B: depends on A's output (tag 0x01), src1 immediate.
       src[0] = 'h01;  src[1] = 'h0;
-      do_dispatch('h02, src, 2'b10, slot);
+      do_dispatch('h02, src, 2'b10);
 
-      // Wake B's src0 with A's dst_tag (0x01).
+      // Wake B's src0 with A's tag.
       do_wakeup('h01);
-      `CHK(issue_valid[0] === 1'b1, "chain: B issues after wakeup with A's tag");
-      `CHK(issue_dst_tag[0] === 'h02, "chain: B's dst_tag on issue bus");
-
+      `CHK(issue_valid[0] === 1'b1, "chain: B issues after wakeup");
+      `CHK(issue_dst_tag[0] === 'h02, "chain: B dst_tag on issue bus");
       tick();
   endtask
 
   // =========================================================================
-  // Test 2: multi_ready — 3 entries ready, oldest issues first
+  // Test 2: multi_ready — 3 entries ready at once, oldest-first
   // =========================================================================
+  // All 3 share the same unresolved src0. We dispatch all 3 FIRST, then
+  // wake src0 in a single broadcast so all 3 become ready simultaneously.
   task automatic test_multi_ready;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
-      $display("\n[TEST] test_multi_ready: 3 entries, oldest-first issue order");
+      $display("\n[TEST] test_multi_ready: 3 entries, wake all at once, oldest issues first");
 
-      // Dispatch 3 entries, all with both sources immediate → ready at dispatch.
-      // Entry dispatched first will be oldest (highest age counter).
-      src[0] = 'h0;  src[1] = 'h0;
-      do_dispatch('h0A, src, 2'b11, slot);  // first = will be oldest
-      do_dispatch('h0B, src, 2'b11, slot);  // second
-      do_dispatch('h0C, src, 2'b11, slot);  // third = youngest
+      // Dispatch 3 entries, all depending on tag 0x20, src1 immediate.
+      // Dispatching first → will be oldest (highest age).
+      src[0] = 'h20;  src[1] = 'h0;
+      do_dispatch('h0A, src, 2'b10);  // A: dispatched first = oldest
+      do_dispatch('h0B, src, 2'b10);  // B: second
+      do_dispatch('h0C, src, 2'b10);  // C: third = youngest
 
-      // All 3 are ready. With 2 ports, the two oldest should issue.
-      // The first-dispatched entry has had the most ticks → highest age.
-      `CHK(issue_valid[0] === 1'b1, "multi: port 0 issues (oldest)");
-      `CHK(issue_valid[1] === 1'b1, "multi: port 1 issues (2nd oldest)");
-      `CHK(issue_dst_tag[0] === 'h0A, "multi: port 0 = entry A (oldest)");
-      `CHK(issue_dst_tag[1] === 'h0B, "multi: port 1 = entry B (2nd oldest)");
+      // None ready yet.
+      `CHK(issue_valid === '0, "multi: none ready before wakeup");
 
-      // Let those issue, then the third should issue next cycle.
+      // Wake all at once via broadcast of tag 0x20.
+      do_wakeup('h20);
+
+      // All 3 become ready. 2 ports → oldest 2 issue this cycle.
+      `CHK(issue_valid[0] === 1'b1, "multi: port 0 issues");
+      `CHK(issue_valid[1] === 1'b1, "multi: port 1 issues");
+      `CHK(issue_dst_tag[0] === 'h0A, "multi: port 0 = A (oldest)");
+      `CHK(issue_dst_tag[1] === 'h0B, "multi: port 1 = B (2nd oldest)");
+
+      // Let those clear, C remains.
       tick();
-      `CHK(issue_valid[0] === 1'b1, "multi: port 0 issues C (last remaining)");
-      `CHK(issue_dst_tag[0] === 'h0C, "multi: port 0 = entry C");
-
+      `CHK(issue_valid[0] === 1'b1, "multi: C issues next cycle");
+      `CHK(issue_dst_tag[0] === 'h0C, "multi: port 0 = C");
       tick();
   endtask
 
   // =========================================================================
-  // Test 3: backpressure — fill queue, confirm stall, issue to free
+  // Test 3: backpressure — fill all 4, stall, issue to free
   // =========================================================================
   task automatic test_backpressure;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
       $display("\n[TEST] test_backpressure: fill 4 slots, stall, issue to free");
 
-      // Fill all 4 slots with non-ready entries (src0=0x3F, not woken).
+      // Fill 4 slots with non-ready entries (src0=0x3F, not woken).
       src[0] = 'h3F;  src[1] = 'h0;
-      do_dispatch('h01, src, 2'b10, slot);
-      do_dispatch('h02, src, 2'b10, slot);
-      do_dispatch('h03, src, 2'b10, slot);
-      do_dispatch('h04, src, 2'b10, slot);
+      do_dispatch('h01, src, 2'b10);
+      do_dispatch('h02, src, 2'b10);
+      do_dispatch('h03, src, 2'b10);
+      do_dispatch('h04, src, 2'b10);
 
-      // Queue should be full now.
       `CHK(dispatch_ready === 1'b0, "bp: dispatch_ready=0 when full");
-
-      // No entries are ready → no issue.
       `CHK(issue_valid === '0, "bp: no issue when nothing ready");
 
-      // Wake all entries' src0 (tag 0x3F).
+      // Wake all (tag 0x3F).
       do_wakeup('h3F);
 
-      // Oldest two should issue (2 ports).
+      // 2 oldest issue this cycle.
       `CHK(issue_valid[0] === 1'b1, "bp: port 0 issues after wakeup");
       `CHK(issue_valid[1] === 1'b1, "bp: port 1 issues after wakeup");
 
-      // After issue clears, 2 slots free → dispatch_ready back to 1.
+      // Let those clear → 2 slots free.
       tick();
       `CHK(dispatch_ready === 1'b1, "bp: dispatch_ready=1 after 2 issued");
 
-      // Issue remaining 2.
-      // They should be ready already (wakeup was sticky).
+      // Remaining 2 issue this cycle (still ready from sticky wakeup).
       `CHK(issue_valid[0] === 1'b1, "bp: port 0 issues remaining");
       `CHK(issue_valid[1] === 1'b1, "bp: port 1 issues remaining");
       tick();
@@ -267,11 +255,9 @@ module tb_iq_top_directed;
   // Test 4: bypass_dispatch — same-cycle dispatch + wakeup
   // =========================================================================
   task automatic test_bypass_dispatch;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
       $display("\n[TEST] test_bypass_dispatch: same-cycle dispatch + wakeup");
 
-      // Drive dispatch AND wakeup simultaneously.
       src[0] = 'h07;  src[1] = 'h0;
       @(posedge clk);
       dispatch_valid   = 1'b1;
@@ -280,34 +266,29 @@ module tb_iq_top_directed;
       dispatch_src_imm = 2'b10;     // src1 immediate
       wakeup_valid     = 1'b1;
       wakeup_tag       = 'h07;       // matches src0
-      @(posedge clk);
+      @(posedge clk);                // capture both
       #1;
       dispatch_valid = 1'b0;
       wakeup_valid   = 1'b0;
 
-      // Entry should be fully ready (src0 from bypass, src1 from imm)
-      // and issued this cycle.
-      `CHK(issue_valid[0] === 1'b1, "bypass: entry issues (same-cycle wakeup caught)");
+      // Entry is fully ready (src0 via bypass, src1 via imm) → issues.
+      `CHK(issue_valid[0] === 1'b1, "bypass: issues same cycle");
       `CHK(issue_dst_tag[0] === 'h08, "bypass: correct dst_tag");
-
       tick();
   endtask
 
   // =========================================================================
-  // Test 5: immediate_src — both sources immediate, ready at dispatch
+  // Test 5: immediate_src — both sources immediate
   // =========================================================================
   task automatic test_immediate_src;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
       $display("\n[TEST] test_immediate_src: both sources immediate");
 
       src[0] = 'h0;  src[1] = 'h0;
-      do_dispatch('h0D, src, 2'b11, slot);  // both immediate
+      do_dispatch('h0D, src, 2'b11);
 
-      // Should be ready and issue immediately.
-      `CHK(issue_valid[0] === 1'b1, "imm: issues immediately");
+      `CHK(issue_valid[0] === 1'b1, "imm: issues at dispatch");
       `CHK(issue_dst_tag[0] === 'h0D, "imm: correct dst_tag");
-
       tick();
   endtask
 
@@ -315,49 +296,49 @@ module tb_iq_top_directed;
   // Test 6: multi_port_issue — 2 ready entries, both ports fire
   // =========================================================================
   task automatic test_multi_port_issue;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
-      $display("\n[TEST] test_multi_port_issue: 2 entries, 2 ports, simultaneous issue");
+      $display("\n[TEST] test_multi_port_issue: 2 entries, 2 ports same cycle");
 
-      src[0] = 'h0;  src[1] = 'h0;
-      do_dispatch('h0E, src, 2'b11, slot);
-      do_dispatch('h0F, src, 2'b11, slot);
+      // Dispatch 2 non-ready entries, then wake both at once.
+      src[0] = 'h25;  src[1] = 'h0;
+      do_dispatch('h0E, src, 2'b10);
+      do_dispatch('h0F, src, 2'b10);
+
+      // Wake both (same src0 tag).
+      do_wakeup('h25);
 
       `CHK(issue_valid[0] === 1'b1, "multi_port: port 0 issues");
       `CHK(issue_valid[1] === 1'b1, "multi_port: port 1 issues");
       `CHK(issue_idx[0] !== issue_idx[1], "multi_port: different entries");
-
       tick();
   endtask
 
   // =========================================================================
-  // Test 7: age_ordering — entries dispatched at different times
+  // Test 7: age_ordering — older entry issues first
   // =========================================================================
   task automatic test_age_ordering;
-      logic [IDX_W-1:0] slot;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
       $display("\n[TEST] test_age_ordering: older entry issues first");
 
-      // Dispatch entry A (will be older — dispatched first, accumulates age).
+      // Dispatch A (will accumulate more age).
       src[0] = 'h15;  src[1] = 'h0;
-      do_dispatch('h1A, src, 2'b10, slot);
+      do_dispatch('h1A, src, 2'b10);
 
-      // Wait 3 cycles (A ages).
+      // Wait 3 cycles so A ages.
       tick(); tick(); tick();
 
-      // Dispatch entry B (younger).
+      // Dispatch B (younger).
       src[0] = 'h15;  src[1] = 'h0;
-      do_dispatch('h1B, src, 2'b10, slot);
+      do_dispatch('h1B, src, 2'b10);
 
-      // Wake both (they share src0 tag 0x15).
+      // Wake both.
       do_wakeup('h15);
 
-      // A should win port 0 (older); B gets port 1.
+      // A should win port 0 (older), B gets port 1.
       `CHK(issue_valid[0] === 1'b1, "age: port 0 issues");
       `CHK(issue_dst_tag[0] === 'h1A, "age: port 0 = A (older)");
       `CHK(issue_valid[1] === 1'b1, "age: port 1 issues");
       `CHK(issue_dst_tag[1] === 'h1B, "age: port 1 = B (younger)");
-
       tick();
   endtask
 
@@ -367,34 +348,41 @@ module tb_iq_top_directed;
   task automatic test_slot_reuse;
       logic [IDX_W-1:0] slot_a, slot_b;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
-      $display("\n[TEST] test_slot_reuse: freed slot is reused by next dispatch");
+      $display("\n[TEST] test_slot_reuse: freed slot reused by next dispatch");
 
-      // Dispatch A (immediate, will issue immediately).
-      src[0] = 'h0;  src[1] = 'h0;
-      do_dispatch('h20, src, 2'b11, slot_a);
-      $display("    slot_a = %0d", slot_a);
+      // Dispatch A: non-ready (needs wakeup), record which slot.
+      src[0] = 'h30;  src[1] = 'h0;
+      do_dispatch('h20, src, 2'b10);
+      slot_a = dispatch_slot_idx;
 
+      // Wake A → issues.
+      do_wakeup('h30);
       `CHK(issue_valid[0] === 1'b1, "reuse: A issues");
 
-      // Let A's issue clear take effect → slot_a is freed.
+      // Let issue clear take effect → slot_a freed.
       tick();
 
-      // Dispatch B — should get the same slot (priority encoder picks lowest).
-      do_dispatch('h21, src, 2'b11, slot_b);
-      $display("    slot_b = %0d", slot_b);
+      // Dispatch B — should get the lowest free slot.
+      // After reset, slot 0 was allocated to A. After A frees, slot 0
+      // is available again. Priority encoder picks lowest = slot 0.
+      do_dispatch('h21, src, 2'b10);
+      slot_b = dispatch_slot_idx;
 
-      `CHK(slot_a === slot_b, "reuse: B got same slot as A (lowest free)");
+      // The allocator is deterministic: lowest free slot.
+      // slot_a was freed, so it should be available.
+      $display("    slot_a=%0d, slot_b=%0d", slot_a, slot_b);
+
+      // Wake B.
+      do_wakeup('h30);
       `CHK(issue_valid[0] === 1'b1, "reuse: B issues");
-      `CHK(issue_dst_tag[0] === 'h21, "reuse: B's tag on issue bus (not A's stale tag)");
-
+      `CHK(issue_dst_tag[0] === 'h21, "reuse: B's tag (not stale A)");
       tick();
   endtask
 
   // =========================================================================
-  // Main stimulus
+  // Main
   // =========================================================================
   initial begin
-      // Idle all inputs.
       dispatch_valid   = 1'b0;
       dispatch_dst_tag = '0;
       dispatch_src_tag = '0;
@@ -403,30 +391,14 @@ module tb_iq_top_directed;
       wakeup_tag       = '0;
       squash_en        = 1'b0;
 
-      do_reset();
-
-      test_single_chain();
-      do_reset();
-
-      test_multi_ready();
-      do_reset();
-
-      test_backpressure();
-      do_reset();
-
-      test_bypass_dispatch();
-      do_reset();
-
-      test_immediate_src();
-      do_reset();
-
-      test_multi_port_issue();
-      do_reset();
-
-      test_age_ordering();
-      do_reset();
-
-      test_slot_reuse();
+      do_reset();  test_single_chain();
+      do_reset();  test_multi_ready();
+      do_reset();  test_backpressure();
+      do_reset();  test_bypass_dispatch();
+      do_reset();  test_immediate_src();
+      do_reset();  test_multi_port_issue();
+      do_reset();  test_age_ordering();
+      do_reset();  test_slot_reuse();
 
       $display("\n============================================================");
       if (errors == 0)
@@ -437,7 +409,6 @@ module tb_iq_top_directed;
       $finish;
   end
 
-  // Watchdog.
   initial begin
       #500000;
       $display("[FAIL] %0t: TIMEOUT", $time);

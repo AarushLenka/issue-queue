@@ -68,10 +68,11 @@
 `define IQ_TOP_SV
 
 `include "iq_pkg.sv"
-`include "iq_if.sv"
-`include "iq_entry.sv"
-`include "iq_wakeup_cam.sv"
-`include "iq_select.sv"
+// NOTE: iq_entry.sv, iq_wakeup_cam.sv, iq_select.sv are compiled as
+// separate files on the xrun command line (see Makefile). We do NOT
+// `include them here — Xcelium compiles each source file as its own
+// compilation unit, so including them would create duplicate module
+// definitions. Only the package (for types) needs to be included.
 
 module iq_top #(
     parameter int unsigned DEPTH     = iq_pkg::DEPTH,
