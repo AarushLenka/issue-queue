@@ -196,8 +196,8 @@ module tb_iq_entry;
       $display("\n[TEST] test_basic: dispatch -> wake src0 -> wake src1 -> issue");
       // --- Dispatch: needs tag5 for src0, tag9 for src1, no immediates ---
       dispatch_dst_tag  = 'h11;
-      dispatch_src_tag[0] = TW'h5;   // explicit per-source assignment — no
-      dispatch_src_tag[1] = TW'h9;   // array-literal-ordering surprises
+      dispatch_src_tag[0] = 'h5;    // explicit per-source assignment — no
+      dispatch_src_tag[1] = 'h9;    // array-literal-ordering surprises
       dispatch_src_imm    = '0;
       do_dispatch_pulse();
 
@@ -209,7 +209,7 @@ module tb_iq_entry;
       `CHK(ready_o === 1'b0,            "basic: not ready (both src unready)");
 
       // --- Wakeup src0 (broadcast tag 5) ---
-      wakeup_tag = TW'h5;
+      wakeup_tag = 'h5;
       do_wakeup_pulse();
 
       // WHY: the CAM compare must match only src0's tag, leaving src1
@@ -220,7 +220,7 @@ module tb_iq_entry;
       `CHK(ready_o === 1'b0,              "basic: still not fully ready (src1 missing)");
 
       // --- Wakeup src1 (broadcast tag 9) ---
-      wakeup_tag = TW'h9;
+      wakeup_tag = 'h9;
       do_wakeup_pulse();
 
       // WHY: this is the "becomes issue-able" transition — the AND-reduction
@@ -260,10 +260,10 @@ module tb_iq_entry;
       $display("\n[TEST] test_bypass: same-cycle dispatch + wakeup for src0");
       // Set payloads first (no edge yet).
       dispatch_dst_tag    = 'h33;
-      dispatch_src_tag[0] = TW'h7;
-      dispatch_src_tag[1] = TW'h8;
+      dispatch_src_tag[0] = 'h7;
+      dispatch_src_tag[1] = 'h8;
       dispatch_src_imm    = '0;
-      wakeup_tag          = TW'h7;       // matches src0 — SAME cycle
+      wakeup_tag          = 'h7;        // matches src0 — SAME cycle
 
       // Drive BOTH strobes for one cycle together.
       @(posedge clk);
@@ -284,7 +284,7 @@ module tb_iq_entry;
       wakeup_valid = 1'b0;
 
       // Finish src1 the normal (next-cycle) way and confirm full readiness.
-      wakeup_tag = TW'h8;
+      wakeup_tag = 'h8;
       do_wakeup_pulse();
       `CHK(entry_o.src_ready[1] === 1'b1, "bypass: src1 ready after late wakeup");
       `CHK(ready_o === 1'b1,              "bypass: fully ready after src1 wakeup");
@@ -303,8 +303,8 @@ module tb_iq_entry;
   task automatic test_imm;
       $display("\n[TEST] test_imm: src0 immediate (ready at dispatch), src1 via wakeup");
       dispatch_dst_tag    = 'h44;
-      dispatch_src_tag[0] = TW'h0;        // don't-care: src0 is immediate
-      dispatch_src_tag[1] = TW'h9;
+      dispatch_src_tag[0] = 'h0;         // don't-care: src0 is immediate
+      dispatch_src_tag[1] = 'h9;
       dispatch_src_imm    = 2'b01;        // bit0=1 -> src0 is immediate
       do_dispatch_pulse();
 
@@ -316,7 +316,7 @@ module tb_iq_entry;
       `CHK(ready_o === 1'b0,              "imm: not fully ready yet (src1 missing)");
 
       // Wakeup src1 the normal way.
-      wakeup_tag = TW'h9;
+      wakeup_tag = 'h9;
       do_wakeup_pulse();
       `CHK(entry_o.src_ready[1] === 1'b1, "imm: src1 ready after wakeup");
       `CHK(ready_o === 1'b1,              "imm: fully ready (1 immediate + 1 wakeup)");
