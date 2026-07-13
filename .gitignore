@@ -1,0 +1,27 @@
+# Simulation logs and temp files
+*.log
+xcelium.d/
+*.vdb
+*.diag
+INCA_libs/
+*.history
+
+# JasperGold temp files
+jgproject/
+*.jdb
+.jasper_*
+
+# Editor temp files
+.DS_Store
+*.swp
+
+# Coverage HTML (keep source HTML but ignore simulation-generated artifacts)
+# Note: docs/coverage/*.html is NOT ignored - we want coverage evidence checked in
+
+# Waveform screenshots (evidence we want to keep)
+# docs/waveforms/*.png is NOT ignored
+
+# Common build artifacts
+*.o
+*.sim
+*.key
