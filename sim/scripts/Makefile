@@ -68,7 +68,9 @@ sim_select:
 sim_top_dir:
 	@mkdir -p $(LOG_DIR)
 	$(XRUN) $(SVFLAGS) \
-	    -f $(FILELIST) tb/tb_iq_top_directed.sv \
+	    rtl/iq_pkg.sv rtl/iq_entry.sv rtl/iq_wakeup_cam.sv \
+	    rtl/iq_select.sv rtl/iq_top.sv \
+	    tb/tb_iq_top_directed.sv \
 	    -top tb_iq_top_directed \
 	    -l $(LOG_DIR)/sim_top_dir.log
 
