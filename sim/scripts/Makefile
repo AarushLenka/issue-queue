@@ -13,7 +13,7 @@ FILELIST  := sim/scripts/filelist.f
 
 # --- Tool flags ---------------------------------------------------------------
 XRUN      := xrun
-SVFLAGS   := -sv -64bit -access +rwc -incdir rtl
+SVFLAGS   := -sv -64bit -access +rwc -incdir rtl -timescale 1ns/1ps
 ELAB_ONLY := -elaborate
 
 # =============================================================================
