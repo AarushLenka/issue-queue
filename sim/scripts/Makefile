@@ -47,6 +47,15 @@ sim_entry:
 	    -top tb_iq_entry \
 	    -l $(LOG_DIR)/sim_entry.log
 
+# Step 2: wakeup CAM broadcast tests
+sim_wakeup:
+	@mkdir -p $(LOG_DIR)
+	$(XRUN) $(SVFLAGS) \
+	    rtl/iq_pkg.sv rtl/iq_entry.sv rtl/iq_wakeup_cam.sv \
+	    tb/tb_iq_wakeup_cam.sv \
+	    -top tb_iq_wakeup_cam \
+	    -l $(LOG_DIR)/sim_wakeup.log
+
 # Step 4: top-level integration directed tests
 sim_top_dir:
 	@mkdir -p $(LOG_DIR)
