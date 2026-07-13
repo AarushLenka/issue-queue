@@ -122,13 +122,13 @@ module tb_iq_select;
       clear_all();
 
       // Entry 0: age=2, ready
-      entry_i[0] = make_entry(1'b1, 4'd2, 'hA0, '1);
+      entry_i[0] = make_entry(1'b1, 4'd2, 'h10, '1);
       // Entry 1: age=5, ready  ← oldest
-      entry_i[1] = make_entry(1'b1, 4'd5, 'hA1, '1);
+      entry_i[1] = make_entry(1'b1, 4'd5, 'h11, '1);
       // Entry 2: age=3, ready
-      entry_i[2] = make_entry(1'b1, 4'd3, 'hA2, '1);
+      entry_i[2] = make_entry(1'b1, 4'd3, 'h12, '1);
       // Entry 3: age=1, ready
-      entry_i[3] = make_entry(1'b1, 4'd1, 'hA3, '1);
+      entry_i[3] = make_entry(1'b1, 4'd1, 'h13, '1);
 
       ready_i = 4'b1111;
 
@@ -138,7 +138,7 @@ module tb_iq_select;
       `CHK(grant_o[0] === 1'b1,               "oldest: port 0 grants");
       `CHK(grant_idx_o[0] === IDX_W'(1),       "oldest: port 0 picks entry 1 (age=5)");
       `CHK(grant_age_o[0] === 4'd5,            "oldest: port 0 reports age=5");
-      `CHK(grant_tag_o[0] === 'hA1,            "oldest: port 0 forwards dst_tag 0xA1");
+      `CHK(grant_tag_o[0] === 'h11,            "oldest: port 0 forwards dst_tag 0x11");
   endtask
 
   // =========================================================================
@@ -149,13 +149,13 @@ module tb_iq_select;
       clear_all();
 
       // Entry 0: age=4, ready  ← second oldest
-      entry_i[0] = make_entry(1'b1, 4'd4, 'hB0, '1);
+      entry_i[0] = make_entry(1'b1, 4'd4, 'h20, '1);
       // Entry 1: age=7, ready  ← oldest
-      entry_i[1] = make_entry(1'b1, 4'd7, 'hB1, '1);
+      entry_i[1] = make_entry(1'b1, 4'd7, 'h21, '1);
       // Entry 2: age=2, ready
-      entry_i[2] = make_entry(1'b1, 4'd2, 'hB2, '1);
+      entry_i[2] = make_entry(1'b1, 4'd2, 'h22, '1);
       // Entry 3: NOT ready (src_ready=01, only src0 ready)
-      entry_i[3] = make_entry(1'b1, 4'd9, 'hB3, 2'b01);
+      entry_i[3] = make_entry(1'b1, 4'd9, 'h23, 2'b01);
 
       ready_i = 4'b0111;  // entries 0, 1, 2 ready; entry 3 not
 
@@ -181,7 +181,7 @@ module tb_iq_select;
       clear_all();
 
       // Only entry 2 is ready.
-      entry_i[2] = make_entry(1'b1, 4'd3, 'hC2, '1);
+      entry_i[2] = make_entry(1'b1, 4'd3, 'h32, '1);
 
       ready_i = 4'b0100;
 
@@ -201,7 +201,7 @@ module tb_iq_select;
 
       // All entries valid but NOT ready (src_ready = 0).
       for (int i = 0; i < TB_DEPTH; i++) begin
-          entry_i[i] = make_entry(1'b1, 4'd5, 'hD0, '0);
+          entry_i[i] = make_entry(1'b1, 4'd5, 'h30, '0);
       end
       ready_i = '0;
 
@@ -219,8 +219,8 @@ module tb_iq_select;
       clear_all();
 
       // Entries 1 and 3 both ready, both age=6.
-      entry_i[1] = make_entry(1'b1, 4'd6, 'hE1, '1);
-      entry_i[3] = make_entry(1'b1, 4'd6, 'hE3, '1);
+      entry_i[1] = make_entry(1'b1, 4'd6, 'h31, '1);
+      entry_i[3] = make_entry(1'b1, 4'd6, 'h33, '1);
 
       ready_i = 4'b1010;
 
@@ -243,11 +243,11 @@ module tb_iq_select;
       clear_all();
 
       // Entry 0: age=10, ready  ← oldest
-      entry_i[0] = make_entry(1'b1, 4'd10, 'hF0, '1);
+      entry_i[0] = make_entry(1'b1, 4'd10, 'h3A, '1);
       // Entry 1: age=8, ready   ← second oldest
-      entry_i[1] = make_entry(1'b1, 4'd8,  'hF1, '1);
+      entry_i[1] = make_entry(1'b1, 4'd8,  'h3B, '1);
       // Entry 2: age=3, ready   ← third
-      entry_i[2] = make_entry(1'b1, 4'd3,  'hF2, '1);
+      entry_i[2] = make_entry(1'b1, 4'd3,  'h3C, '1);
 
       ready_i = 4'b0111;
 
