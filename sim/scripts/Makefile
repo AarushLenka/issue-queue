@@ -56,6 +56,14 @@ sim_wakeup:
 	    -top tb_iq_wakeup_cam \
 	    -l $(LOG_DIR)/sim_wakeup.log
 
+# Step 3: selector oldest-ready + multi-port tests
+sim_select:
+	@mkdir -p $(LOG_DIR)
+	$(XRUN) $(SVFLAGS) \
+	    rtl/iq_pkg.sv rtl/iq_select.sv \
+	    tb/tb_iq_select.sv \
+	    -top tb_iq_select \
+	    -l $(LOG_DIR)/sim_select.log
 # Step 4: top-level integration directed tests
 sim_top_dir:
 	@mkdir -p $(LOG_DIR)
