@@ -157,25 +157,53 @@ module tb_iq_top_directed;
       src[0] = 'h10;  src[1] = 'h0;
       do_dispatch('h01, src, 2'b10);
 
-      // A is NOT ready yet (src0 unresolved).
+      // DEBUG: dump all entry state after dispatch
+      $display("  [DBG] After dispatch A:");
+      for (int i = 0; i < TB_DEPTH; i++) begin
+          $display("    entry[%0d]: valid=%b src_ready=%b dst_tag=%h age=%0d src_tag[0]=%h src_tag[1]=%h",
+              i,
+              dut.u_cam.entry_array_o[i].valid,
+              dut.u_cam.entry_array_o[i].src_ready,
+              dut.u_cam.entry_array_o[i].dst_tag,
+              dut.u_cam.entry_array_o[i].age,
+              dut.u_cam.entry_array_o[i].src_tag[0],
+              dut.u_cam.entry_array_o[i].src_tag[1]);
+      end
+      $display("    ready_array=%b  free_vec=%b  alloc_idx=%0d",
+          dut.ready_array, dut.free_vec, dut.alloc_idx);
+      $display("    issue_valid=%b  sel_grant=%b  dispatch_ready=%b",
+          issue_valid, dut.sel_grant, dispatch_ready);
+
       `CHK(issue_valid[0] === 1'b0, "chain: A not ready before wakeup");
 
-      // Wake A's src0 → entry registers update → ready_o=1 → selector fires.
+      // Wake A's src0
       do_wakeup('h10);
 
-      // RIGHT NOW (after wakeup capture + #1): A is ready, selector picked it.
+      // DEBUG: dump state after wakeup
+      $display("  [DBG] After wakeup 0x10:");
+      for (int i = 0; i < TB_DEPTH; i++) begin
+          if (dut.u_cam.entry_array_o[i].valid)
+              $display("    entry[%0d]: valid=%b src_ready=%b dst_tag=%h age=%0d",
+                  i,
+                  dut.u_cam.entry_array_o[i].valid,
+                  dut.u_cam.entry_array_o[i].src_ready,
+                  dut.u_cam.entry_array_o[i].dst_tag,
+                  dut.u_cam.entry_array_o[i].age);
+      end
+      $display("    ready_array=%b  issue_valid=%b  sel_grant=%b",
+          dut.ready_array, issue_valid, dut.sel_grant);
+      $display("    issue_dst_tag[0]=%h  issue_idx[0]=%0d",
+          issue_dst_tag[0], issue_idx[0]);
+
       `CHK(issue_valid[0] === 1'b1, "chain: A issues after wakeup");
       `CHK(issue_dst_tag[0] === 'h01, "chain: A dst_tag on issue bus");
 
-      // Let A's issue_clear take effect.
       tick();
       `CHK(issue_valid[0] === 1'b0, "chain: no issue after A cleared");
 
-      // Dispatch B: depends on A's output (tag 0x01), src1 immediate.
+      // Dispatch B
       src[0] = 'h01;  src[1] = 'h0;
       do_dispatch('h02, src, 2'b10);
-
-      // Wake B's src0 with A's tag.
       do_wakeup('h01);
       `CHK(issue_valid[0] === 1'b1, "chain: B issues after wakeup");
       `CHK(issue_dst_tag[0] === 'h02, "chain: B dst_tag on issue bus");
