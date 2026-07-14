@@ -159,6 +159,7 @@ module tb_iq_top_random;
     iq_tx tx;
     int cycle_count = 0;
     localparam MAX_CYCLES = 20000;
+    int local_squash_seq;
 
     initial begin
         // Initialize
@@ -182,8 +183,10 @@ module tb_iq_top_random;
             @(posedge clk);
             #1; // Post-active region
 
+            local_squash_seq = current_disp_seq - $urandom_range(0, 15);
+
             if (tx.randomize() with {
-                c_squash_seq == current_disp_seq - ($urandom_range(0, 15)); 
+                c_squash_seq == local_squash_seq; 
             }) begin
                 dispatch_valid   = tx.c_dispatch_valid;
                 dispatch_dst_tag = tx.c_dispatch_dst_tag;
