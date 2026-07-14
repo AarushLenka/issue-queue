@@ -1,5 +1,5 @@
-`ifndef IQ_ASSERTIONS_SVA
-`define IQ_ASSERTIONS_SVA
+`ifndef IQ_ASSERTIONS_SV
+`define IQ_ASSERTIONS_SV
 
 `include "iq_pkg.sv"
 
@@ -109,4 +109,4 @@ bind iq_top iq_assertions #(
     .free_vec          (free_vec)
 );
 
-`endif // IQ_ASSERTIONS_SVA
+`endif // IQ_ASSERTIONS_SV
