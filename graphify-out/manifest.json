@@ -1,0 +1,92 @@
+{
+  ".claude/settings.local.json": {
+    "mtime": 1783931662.9581478,
+    "ast_hash": "a0b5cbf856545bfb093ac64536404fd6",
+    "semantic_hash": "a0b5cbf856545bfb093ac64536404fd6"
+  },
+  "rtl/iq_entry.sv": {
+    "mtime": 1784046166.946326,
+    "ast_hash": "d214ebdab6e535ea160e7d8b64b57f32",
+    "semantic_hash": ""
+  },
+  "rtl/iq_if.sv": {
+    "mtime": 1783931324.7221975,
+    "ast_hash": "6ab8fa4abd17691dac4017ace1e14804",
+    "semantic_hash": "6ab8fa4abd17691dac4017ace1e14804"
+  },
+  "rtl/iq_pkg.sv": {
+    "mtime": 1784046166.9463933,
+    "ast_hash": "a0145bff155795022aa7e82ea936aa4a",
+    "semantic_hash": ""
+  },
+  "rtl/iq_select.sv": {
+    "mtime": 1783997582.310582,
+    "ast_hash": "8be488af31142e296996ebc09f7cbdde",
+    "semantic_hash": "8be488af31142e296996ebc09f7cbdde"
+  },
+  "rtl/iq_top.sv": {
+    "mtime": 1784046166.9464583,
+    "ast_hash": "24b08be0768fc77df0e73d512e580296",
+    "semantic_hash": ""
+  },
+  "rtl/iq_wakeup_cam.sv": {
+    "mtime": 1784046166.9464583,
+    "ast_hash": "a713dec5c809cabb0cf175dddbae1820",
+    "semantic_hash": ""
+  },
+  "sim/scripts/filelist.f": {
+    "mtime": 1783939964.4678395,
+    "ast_hash": "a100110055d1c1dedea2f974ff4c687f",
+    "semantic_hash": "a100110055d1c1dedea2f974ff4c687f"
+  },
+  "tb/tb_iq_entry.sv": {
+    "mtime": 1784046166.946589,
+    "ast_hash": "c91f15c65d34f5d0d968cb5d35c4876a",
+    "semantic_hash": ""
+  },
+  "tb/tb_iq_select.sv": {
+    "mtime": 1783997582.3111577,
+    "ast_hash": "3788ded3de141d35a88bc87d8100022f",
+    "semantic_hash": "3788ded3de141d35a88bc87d8100022f"
+  },
+  "tb/tb_iq_top_directed.sv": {
+    "mtime": 1784046166.946589,
+    "ast_hash": "b145b3e0ed80e37df3fc681aaafba70c",
+    "semantic_hash": ""
+  },
+  "tb/tb_iq_wakeup_cam.sv": {
+    "mtime": 1784046166.946589,
+    "ast_hash": "73c69176cd8e171ffc3b192fb67e1cc2",
+    "semantic_hash": ""
+  },
+  "sva/iq_assertions.sv": {
+    "mtime": 1784048029.8451242,
+    "ast_hash": "24e07121f34c94d620ef245a07ed5a80",
+    "semantic_hash": ""
+  },
+  "tb/tb_iq_top_random.sv": {
+    "mtime": 1784049115.0908563,
+    "ast_hash": "bac10250d208f5aede8ec30e8ed936ee",
+    "semantic_hash": ""
+  },
+  ".agents/rules/graphify.md": {
+    "mtime": 1784031375.9943564,
+    "ast_hash": "f1e53ecc9194573d3c28fc116c743a2e",
+    "semantic_hash": ""
+  },
+  ".agents/workflows/graphify.md": {
+    "mtime": 1784031375.9944365,
+    "ast_hash": "0bc020d491fca99550c1ea3de0a5f862",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1783931324.7211976,
+    "ast_hash": "af71e3aa495844a7d766d93d07092103",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1783857810.089258,
+    "ast_hash": "9959758180d69212022f10f07d089d71",
+    "semantic_hash": ""
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "communities": {
+    "0": [
+      "tb_tb_iq_entry",
+      "tb_tb_iq_entry_sv_do_dispatch_pulse",
+      "tb_tb_iq_entry_sv_do_issue_pulse",
+      "tb_tb_iq_entry_sv_do_reset",
+      "tb_tb_iq_entry_sv_do_wakeup_pulse",
+      "tb_tb_iq_entry_sv_iq_pkg",
+      "tb_tb_iq_entry_sv_test_basic"
+    ],
+    "1": [
+      "tb_tb_iq_wakeup_cam",
+      "tb_tb_iq_wakeup_cam_sv_dispatch_to_slot",
+      "tb_tb_iq_wakeup_cam_sv_do_issue",
+      "tb_tb_iq_wakeup_cam_sv_do_reset",
+      "tb_tb_iq_wakeup_cam_sv_do_wakeup",
+      "tb_tb_iq_wakeup_cam_sv_iq_pkg",
+      "tb_tb_iq_wakeup_cam_sv_test_broadcast"
+    ],
+    "2": [
+      "tb_tb_iq_top_directed",
+      "tb_tb_iq_top_directed_sv_do_dispatch",
+      "tb_tb_iq_top_directed_sv_do_reset",
+      "tb_tb_iq_top_directed_sv_do_wakeup",
+      "tb_tb_iq_top_directed_sv_iq_pkg",
+      "tb_tb_iq_top_directed_sv_tick"
+    ],
+    "3": [
+      "tb_tb_iq_select",
+      "tb_tb_iq_select_sv_clear_all",
+      "tb_tb_iq_select_sv_iq_pkg",
+      "tb_tb_iq_select_sv_make_entry",
+      "tb_tb_iq_select_sv_test_oldest_wins"
+    ],
+    "4": [
+      "iq_select",
+      "iq_wakeup_cam",
+      "rtl_iq_top",
+      "rtl_iq_top_iq_top"
+    ],
+    "5": [
+      "rtl_iq_select",
+      "rtl_iq_select_iq_select",
+      "rtl_iq_select_iq_select_find_oldest_ready",
+      "rtl_iq_select_iq_select_pick_older"
+    ],
+    "6": [
+      "rtl_iq_pkg",
+      "rtl_iq_pkg_sv_age_older_than",
+      "rtl_iq_pkg_sv_is_ready"
+    ],
+    "7": [
+      "rtl_iq_entry",
+      "rtl_iq_entry_iq_entry"
+    ],
+    "8": [
+      "rtl_iq_wakeup_cam",
+      "rtl_iq_wakeup_cam_iq_wakeup_cam"
+    ],
+    "9": [
+      "rtl_iq_if"
+    ],
+    "10": [
+      "sim_scripts_filelist"
+    ]
+  },
+  "cohesion": {
+    "0": 0.2857142857142857,
+    "1": 0.2857142857142857,
+    "2": 0.3333333333333333,
+    "3": 0.4,
+    "4": 0.5,
+    "5": 0.5,
+    "6": 0.6666666666666666,
+    "7": 1.0,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0
+  },
+  "gods": [
+    {
+      "id": "rtl_iq_select_iq_select",
+      "label": "iq_select",
+      "degree": 3
+    },
+    {
+      "id": "rtl_iq_top_iq_top",
+      "label": "iq_top",
+      "degree": 3
+    },
+    {
+      "id": "rtl_iq_entry_iq_entry",
+      "label": "iq_entry",
+      "degree": 1
+    },
+    {
+      "id": "iq_wakeup_cam",
+      "label": "iq_wakeup_cam",
+      "degree": 1
+    },
+    {
+      "id": "iq_select",
+      "label": "iq_select",
+      "degree": 1
+    },
+    {
+      "id": "rtl_iq_wakeup_cam_iq_wakeup_cam",
+      "label": "iq_wakeup_cam",
+      "degree": 1
+    },
+    {
+      "id": "tb_tb_iq_entry_sv_iq_pkg",
+      "label": "iq_pkg",
+      "degree": 1
+    },
+    {
+      "id": "tb_tb_iq_entry_sv_do_reset",
+      "label": "do_reset",
+      "degree": 1
+    },
+    {
+      "id": "tb_tb_iq_entry_sv_do_dispatch_pulse",
+      "label": "do_dispatch_pulse",
+      "degree": 1
+    },
+    {
+      "id": "tb_tb_iq_entry_sv_do_wakeup_pulse",
+      "label": "do_wakeup_pulse",
+      "degree": 1
+    }
+  ],
+  "surprises": [],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

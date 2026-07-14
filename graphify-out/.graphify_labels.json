@@ -1,0 +1,20 @@
+{
+  "0": "tb_iq_entry.sv",
+  "1": "tb_iq_wakeup_cam.sv",
+  "2": "tb_iq_top_directed.sv",
+  "3": "tb_iq_select.sv",
+  "4": "iq_top",
+  "5": "iq_select",
+  "6": "iq_pkg.sv",
+  "7": "iq_entry.sv",
+  "8": "iq_wakeup_cam.sv",
+  "9": "iq_if.sv",
+  "10": "filelist.f",
+  "11": "CLAUDE.md — Issue Queue (RTL Design Project)",
+  "12": "Build order — follow these steps in sequence, don't skip ahead",
+  "13": "tb_iq_top_random.sv",
+  "14": "graphify.md",
+  "15": "graphify.md",
+  "16": "README.md",
+  "17": "iq_assertions.sv"
+}
