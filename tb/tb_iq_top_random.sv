@@ -111,9 +111,11 @@ module tb_iq_top_random;
     // =========================================================================
     // Coverage
     // =========================================================================
+    int occupancy;
+    assign occupancy = TB_DEPTH - $countones(dut.free_vec);
+
     covergroup cg_iq_stats @(posedge clk);
         // Occupancy coverage
-        int occupancy = TB_DEPTH - $countones(dut.free_vec);
         cp_occupancy: coverpoint occupancy {
             bins empty       = {0};
             bins partially_full = {[1:TB_DEPTH-1]};
