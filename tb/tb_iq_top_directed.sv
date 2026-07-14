@@ -113,19 +113,23 @@ module tb_iq_top_directed;
       #1;
   endtask
 
-  // Dispatch one instruction. After return, we are at posedge+#1 where
-  // the entry has been captured. dispatch_valid is deasserted.
+  // Dispatch one instruction.
+  // TIMING: inputs change #1 after the align edge (mid-cycle) so they are
+  // stable for one full cycle before the capturing posedge. This avoids an
+  // Active-region race where the always_ff could see the new value at the
+  // align edge itself.
   task automatic do_dispatch(
       input logic [TAG_WIDTH-1:0]              dst,
       input logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src,
       input logic [NUM_SRC-1:0]                imm
   );
       @(posedge clk);
+      #1;                         // ← past the Active region
       dispatch_valid   = 1'b1;
       dispatch_dst_tag = dst;
       dispatch_src_tag = src;
       dispatch_src_imm = imm;
-      @(posedge clk);   // capturing edge
+      @(posedge clk);   // capturing edge — inputs stable
       #1;
       dispatch_valid = 1'b0;
   endtask
@@ -133,6 +137,7 @@ module tb_iq_top_directed;
   // Broadcast a wakeup tag for one cycle.
   task automatic do_wakeup(input logic [TAG_WIDTH-1:0] tag);
       @(posedge clk);
+      #1;                         // ← past the Active region
       wakeup_valid = 1'b1;
       wakeup_tag   = tag;
       @(posedge clk);   // capturing edge
@@ -288,13 +293,14 @@ module tb_iq_top_directed;
 
       src[0] = 'h07;  src[1] = 'h0;
       @(posedge clk);
+      #1;                            // ← past the Active region
       dispatch_valid   = 1'b1;
       dispatch_dst_tag = 'h08;
       dispatch_src_tag = src;
       dispatch_src_imm = 2'b10;     // src1 immediate
       wakeup_valid     = 1'b1;
       wakeup_tag       = 'h07;       // matches src0
-      @(posedge clk);                // capture both
+      @(posedge clk);                // capture both — inputs stable
       #1;
       dispatch_valid = 1'b0;
       wakeup_valid   = 1'b0;
