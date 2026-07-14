@@ -50,6 +50,7 @@ module iq_entry #(
     // Immediate mask: bit i = 1 means source i is an immediate (no producer),
     // so it is ready the instant the entry is written — no wakeup needed.
     input  logic [NUM_SRC-1:0]                 dispatch_src_imm,
+    input  logic [15:0]                        dispatch_disp_seq,
 
     // --- Wakeup snoop (global broadcast; every entry sees the same bus) -----
     input  logic                               wakeup_valid,
@@ -57,7 +58,8 @@ module iq_entry #(
 
     // --- Clear events --------------------------------------------------------
     // issue_clear  : this entry was granted by the selector this cycle.
-    // squash_clear : this entry is being flushed (Step 5; tied to 0 until then).
+    // squash_clear : this entry is being flushed — gated per-entry by the CAM
+    //                 (Step 5): only entries with disp_seq > squash_seq clear.
     input  logic                               issue_clear,
     input  logic                               squash_clear,
 
@@ -168,7 +170,7 @@ module iq_entry #(
             entry_r.src_tag   <= dispatch_src_tag;
             entry_r.src_ready <= dispatch_src_imm | wakeup_hit;
             entry_r.age       <= '0;
-            entry_r.disp_seq  <= '0;             // reserved; wired in Step 5
+            entry_r.disp_seq  <= dispatch_disp_seq;   // monotonic sequence number for squash comparison
         end else if (issue_clear || squash_clear) begin
             // Entry leaves the queue. Payload left don't-care (overwritten on
             // next dispatch); we clear validity + src_ready + age for clean

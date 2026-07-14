@@ -110,8 +110,12 @@ module iq_top #(
     output logic [NUM_PORTS-1:0][TAG_WIDTH-1:0]           issue_dst_tag,
     output logic [NUM_PORTS-1:0][AGE_WIDTH-1:0]           issue_age,
 
-    // Squash input (Step 5 — active-high, clears ALL valid entries for now):
-    input  logic                               squash_en
+    // Squash inputs:
+    // squash_en  : active-high, a branch misprediction occurred this cycle.
+    // squash_seq : dispatch sequence number of the mispredicted branch.
+    //              Entries with disp_seq > squash_seq are flushed.
+    input  logic                               squash_en,
+    input  logic [15:0]                        squash_seq
 );
 
     localparam int unsigned IDX_W = (DEPTH <= 1) ? 1 : $clog2(DEPTH);
@@ -164,12 +168,33 @@ module iq_top #(
     assign dispatch_accepted = dispatch_valid && has_free;
     assign dispatch_slot_idx = alloc_idx;
 
+    // =========================================================================
+    // Global dispatch sequence counter
+    // =========================================================================
+    // Monotonically increasing 16-bit counter, incremented once per accepted
+    // dispatch. Each dispatched instruction stores this value as its disp_seq,
+    // establishing a total order among all dispatched instructions. This is
+    // the key to correct squash: comparing disp_seq against the branch's
+    // sequence number tells us unambiguously whether an entry is younger.
+    //
+    // The counter is NOT reset on squash — only on full pipeline reset.
+    // This preserves ordering for surviving entries across partial flushes.
+    logic [15:0] disp_seq_r;
+
+    always_ff @(posedge clk or negedge rst_n) begin : disp_seq_counter
+        if (!rst_n)
+            disp_seq_r <= '0;
+        else if (dispatch_accepted)
+            disp_seq_r <= disp_seq_r + 16'd1;
+    end
+
     // Free-vector update: sequential logic maintaining the allocation state.
-    // Three events modify free_vec:
+    // Four events modify free_vec:
     //   1. Reset      → all slots free.
-    //   2. Dispatch   → allocated slot becomes occupied (clear bit).
-    //   3. Issue      → issued slot(s) become free (set bit).
-    //   4. Squash     → squashed slots become free (Step 5 will refine).
+    //   2. Issue      → issued slot(s) become free (set bit).
+    //   3. Squash     → squashed slot(s) become free (Step 5: only entries
+    //                   with disp_seq > squash_seq, mirroring the CAM's decode).
+    //   4. Dispatch   → allocated slot becomes occupied (clear bit).
     //
     // Priority: issue/squash frees happen BEFORE dispatch consume in the
     // same cycle. This means if entry X issues and entry X is also the
@@ -186,10 +211,14 @@ module iq_top #(
                     free_vec[sel_idx[p]] <= 1'b1;
             end
 
-            // Step 2: free all slots on squash (Step 5 will make this
-            // selective based on dispatch sequence numbers).
+            // Step 2: free slots whose entries are being squashed.
+            // The CAM computes per-entry squash_clear_oh based on disp_seq
+            // comparison. We mirror that logic here so free_vec stays in sync.
             if (squash_en) begin
-                free_vec <= '1;
+                for (int i = 0; i < DEPTH; i++) begin
+                    if (entry_array[i].valid && (entry_array[i].disp_seq > squash_seq))
+                        free_vec[i] <= 1'b1;
+                end
             end
 
             // Step 3: consume slot on dispatch (after frees, so if the
@@ -221,6 +250,7 @@ module iq_top #(
         .dispatch_dst_tag  (dispatch_dst_tag),
         .dispatch_src_tag  (dispatch_src_tag),
         .dispatch_src_imm  (dispatch_src_imm),
+        .dispatch_disp_seq (disp_seq_r),
 
         .wakeup_valid      (wakeup_valid),
         .wakeup_tag        (wakeup_tag),
@@ -229,6 +259,7 @@ module iq_top #(
         .issue_idx         (sel_idx),
 
         .squash_en         (squash_en),
+        .squash_seq        (squash_seq),
 
         .entry_array_o     (entry_array),
         .ready_array_o     (ready_array)

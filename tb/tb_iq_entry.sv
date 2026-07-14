@@ -123,6 +123,7 @@ module tb_iq_entry;
       .dispatch_dst_tag (dispatch_dst_tag),
       .dispatch_src_tag (dispatch_src_tag),
       .dispatch_src_imm (dispatch_src_imm),
+      .dispatch_disp_seq(16'd0),          // not tested here; squash uses iq_top's counter
       .wakeup_valid     (wakeup_valid),
       .wakeup_tag       (wakeup_tag),
       .issue_clear      (issue_clear),
