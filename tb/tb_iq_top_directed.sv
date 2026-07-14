@@ -482,21 +482,22 @@ module tb_iq_top_directed;
       logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
       $display("\n[TEST] test_speculative_wakeup: dependent issues early");
 
-      // Dispatch non-ready entry waiting on tag 0x55
-      src[0] = 'h55;  src[1] = 'h0;
-      do_dispatch('h66, src, 2'b10);
+      // Dispatch non-ready entry waiting on tag 0x25
+      src[0] = 'h25;  src[1] = 'h0;
+      do_dispatch('h26, src, 2'b10);
 
       `CHK(issue_valid[0] === 1'b0, "spec: not ready before spec wakeup");
 
-      // Broadcast speculative wakeup for 0x55
-      do_spec_wakeup('h55);
+      // Broadcast speculative wakeup for 0x25
+      do_spec_wakeup('h25);
 
       // Verify it issues immediately
       `CHK(issue_valid[0] === 1'b1, "spec: issues on speculative wakeup");
-      `CHK(issue_dst_tag[0] === 'h66, "spec: correct tag on issue bus");
+      `CHK(issue_dst_tag[0] === 'h26, "spec: correct tag on issue bus");
 
       tick();
   endtask
+
 
   // =========================================================================
   // Main
