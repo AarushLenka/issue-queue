@@ -159,7 +159,7 @@ module tb_iq_top_random;
     iq_tx tx;
     int cycle_count = 0;
     localparam MAX_CYCLES = 20000;
-    int local_squash_seq;
+    logic [15:0] local_squash_seq;
 
     initial begin
         // Initialize
