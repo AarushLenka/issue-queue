@@ -114,19 +114,21 @@ package iq_pkg;
   } iq_entry_t;
 
   // ---------------------------------------------------------------------------
-  // Helper: "is entry `a` older-or-equal than entry `b`?"
+  // Helper: "is entry with age `a` strictly older than entry with age `b`?"
   // ---------------------------------------------------------------------------
-  // Returns 1 if `a` should be considered strictly older than `b` for
-  // arbitration purposes. Modelled after the saturating-age scheme:
-  //   - If `a` is saturated, `a` is older than any non-saturated `b`.
-  //   - Otherwise, lower raw age wins.
+  // Age starts at 0 on dispatch and increments each cycle (saturating at
+  // AGE_SAT_MAX). Therefore: HIGHER age = OLDER entry.
   //
-  // We intentionally do NOT say "equal age" — in a tied-age worst case
-  // the selector breaks ties by lower index, which is handled there.
+  //   - If both are saturated (both == SAT_MAX), ages are equal → return 0
+  //     (tie, broken by lower index in the selector).
+  //   - Otherwise, a > b means a has been sitting longer → a is older.
+  //
+  // Simple unsigned comparison handles saturated values correctly because
+  // if a==SAT_MAX and b<SAT_MAX then a>b is true.
   // ---------------------------------------------------------------------------
   function automatic logic age_older_than(input logic [AGE_WIDTH-1:0] a,
                                            input logic [AGE_WIDTH-1:0] b);
-    return (a == AGE_SAT_MAX) | (a < b);
+    return (a > b);
   endfunction
 
   // ---------------------------------------------------------------------------
