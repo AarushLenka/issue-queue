@@ -70,6 +70,7 @@ sim_top_dir:
 	$(XRUN) $(SVFLAGS) \
 	    rtl/iq_pkg.sv rtl/iq_entry.sv rtl/iq_wakeup_cam.sv \
 	    rtl/iq_select.sv rtl/iq_top.sv \
+	    sva/iq_assertions.sva \
 	    tb/tb_iq_top_directed.sv \
 	    -top tb_iq_top_directed \
 	    -l $(LOG_DIR)/sim_top_dir.log

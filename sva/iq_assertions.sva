@@ -1,0 +1,112 @@
+`ifndef IQ_ASSERTIONS_SVA
+`define IQ_ASSERTIONS_SVA
+
+`include "iq_pkg.sv"
+
+module iq_assertions #(
+    parameter int unsigned DEPTH     = iq_pkg::DEPTH,
+    parameter int unsigned NUM_PORTS = iq_pkg::NUM_PORTS,
+    parameter int unsigned IDX_W     = (DEPTH <= 1) ? 1 : $clog2(DEPTH)
+)(
+    input logic clk,
+    input logic rst_n,
+
+    // Observability ports mapped to iq_top internals
+    input logic [NUM_PORTS-1:0]            issue_valid,
+    input logic [NUM_PORTS-1:0][IDX_W-1:0] issue_idx,
+    input logic [DEPTH-1:0]                ready_array,
+
+    // For liveness check
+    input logic                            dispatch_accepted,
+    input logic [IDX_W-1:0]                alloc_idx,
+    input logic [DEPTH-1:0]                free_vec
+);
+
+    // =========================================================================
+    // Property 1: No-issue-while-not-ready
+    // =========================================================================
+    // If a port grants an issue this cycle, the corresponding entry MUST
+    // have its ready bit set in the ready_array.
+    generate
+        for (genvar p = 0; p < NUM_PORTS; p++) begin : gen_ready_chk
+            property p_issue_ready;
+                @(posedge clk) disable iff (!rst_n)
+                issue_valid[p] |-> ready_array[issue_idx[p]];
+            endproperty
+            
+            assert_issue_ready: assert property (p_issue_ready)
+                else $error("SVA: Port %0d issued non-ready entry %0d", p, issue_idx[p]);
+        end
+    endgenerate
+
+    // =========================================================================
+    // Property 2: No-double-issue (Mutual Exclusion)
+    // =========================================================================
+    // No two distinct ports can issue the SAME entry index in the SAME cycle.
+    generate
+        for (genvar i = 0; i < NUM_PORTS; i++) begin : gen_mutex_i
+            for (genvar j = i + 1; j < NUM_PORTS; j++) begin : gen_mutex_j
+                property p_mutex;
+                    @(posedge clk) disable iff (!rst_n)
+                    (issue_valid[i] && issue_valid[j]) |-> (issue_idx[i] != issue_idx[j]);
+                endproperty
+                
+                assert_mutual_exclusion: assert property (p_mutex)
+                    else $error("SVA: Ports %0d and %0d both issued entry %0d", i, j, issue_idx[i]);
+            end
+        end
+    endgenerate
+
+    // =========================================================================
+    // Property 3: Bounded-issue Liveness
+    // =========================================================================
+    // If an instruction is successfully dispatched into the queue, it MUST 
+    // eventually leave the queue (either by issuing or by being squashed) 
+    // within a bounded number of cycles.
+    // 
+    // TRICK EXPLANATION:
+    // We cannot easily do `|-> eventually issue_bus_tag == my_tag` because tags 
+    // can be re-dispatched while the instruction is queued, or the instruction 
+    // can be squashed. However, an entry's physical slot index is static while 
+    // it resides in the queue. Thus, we can track the slot's `free_vec` status!
+    // When an instruction is dispatched into `alloc_idx`, its `free_vec` bit
+    // goes to 0. It leaves the queue (issue or squash) exactly when that bit 
+    // returns to 1.
+    generate
+        for (genvar i = 0; i < DEPTH; i++) begin : gen_liveness
+            property p_liveness;
+                @(posedge clk) disable iff (!rst_n)
+                // If entry 'i' is allocated this cycle...
+                (dispatch_accepted && (alloc_idx == i))
+                |=>
+                // ...it must eventually be freed within 1000 cycles.
+                (##[0:1000] (free_vec[i] == 1'b1));
+            endproperty
+
+            assert_liveness: assert property (p_liveness)
+                else $error("SVA: Starvation! Entry %0d did not issue or squash within 1000 cycles", i);
+        end
+    endgenerate
+
+endmodule : iq_assertions
+
+// =============================================================================
+// Binding the assertions into the iq_top module.
+// =============================================================================
+// This injects an instance of `iq_assertions` into `iq_top` during compilation,
+// allowing it to peek at internal signals without modifying the RTL source.
+bind iq_top iq_assertions #(
+    .DEPTH(DEPTH),
+    .NUM_PORTS(NUM_PORTS)
+) u_sva (
+    .clk               (clk),
+    .rst_n             (rst_n),
+    .issue_valid       (sel_grant),
+    .issue_idx         (sel_idx),
+    .ready_array       (ready_array),
+    .dispatch_accepted (dispatch_accepted),
+    .alloc_idx         (alloc_idx),
+    .free_vec          (free_vec)
+);
+
+`endif // IQ_ASSERTIONS_SVA
