@@ -79,7 +79,10 @@ sim_top_dir:
 sim_top_rand:
 	@mkdir -p $(LOG_DIR)
 	$(XRUN) $(SVFLAGS) \
-	    -f $(FILELIST) tb/tb_iq_top_random.sv \
+	    rtl/iq_pkg.sv rtl/iq_entry.sv rtl/iq_wakeup_cam.sv \
+	    rtl/iq_select.sv rtl/iq_top.sv \
+	    sva/iq_assertions.sv \
+	    tb/tb_iq_top_random.sv \
 	    -top tb_iq_top_random \
 	    -coverage all -covoverwrite \
 	    -l $(LOG_DIR)/sim_top_rand.log
