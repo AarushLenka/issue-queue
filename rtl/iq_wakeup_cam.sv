@@ -101,6 +101,8 @@ module iq_wakeup_cam #(
     // already handles one bus, and a second bus just adds a second hit-OR term.
     input  logic                               wakeup_valid,
     input  logic [TAG_WIDTH-1:0]               wakeup_tag,
+    input  logic                               spec_wakeup_valid,
+    input  logic [TAG_WIDTH-1:0]               spec_wakeup_tag,
 
     // --- Issue clear (from the selector in iq_top) --------------------------
     // NUM_PORTS parallel issue grants. issue_grant[p]=1 means port p has
@@ -245,6 +247,8 @@ module iq_wakeup_cam #(
                 // whether to set their src_ready bits. No central arbiter.
                 .wakeup_valid     (wakeup_valid),
                 .wakeup_tag       (wakeup_tag),
+                .spec_wakeup_valid(spec_wakeup_valid),
+                .spec_wakeup_tag  (spec_wakeup_tag),
 
                 // Clear signals: per-entry from the one-hot decodes.
                 .issue_clear      (issue_clear_oh[gi]),

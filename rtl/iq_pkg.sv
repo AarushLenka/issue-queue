@@ -78,6 +78,22 @@ package iq_pkg;
   localparam logic [AGE_WIDTH-1:0] AGE_SAT_MAX = '1;  // all-ones = saturated
 
   // ---------------------------------------------------------------------------
+  // STEP 6: SPECULATIVE WAKEUP (Architectural Note)
+  // ---------------------------------------------------------------------------
+  // To hide execution latency, producers often broadcast their destination tag
+  // early (e.g., latency - 1 cycles). This allows dependent instructions to 
+  // wake up and arbitrate for an execution port so they arrive at the ALU 
+  // exactly when the data is forwarded.
+  // 
+  // If the producer fails to deliver the data (e.g., a cache miss or variable
+  // ALU latency), the speculatively issued dependents must be cancelled and
+  // "replayed". A full replay mechanism requires either holding the instruction
+  // in the issue queue until verification, or placing it in a dedicated replay
+  // queue. In this design, we implement the speculative wakeup path but scope 
+  // out the full replay storage to limit complexity.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
   // Packed struct: one issue-queue entry's payload
   // ---------------------------------------------------------------------------
   // In SystemVerilog, a `struct` inside a package becomes a single type

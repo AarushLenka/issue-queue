@@ -110,6 +110,8 @@ module tb_iq_wakeup_cam;
       .dispatch_disp_seq (16'd0),
       .wakeup_valid      (wakeup_valid),
       .wakeup_tag        (wakeup_tag),
+      .spec_wakeup_valid (1'b0),
+      .spec_wakeup_tag   ({TAG_WIDTH{1'b0}}),
       .issue_grant       (issue_grant),
       .issue_idx         (issue_idx),
       .squash_en         (squash_en),

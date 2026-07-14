@@ -75,6 +75,9 @@ module tb_iq_top_directed;
   logic                                       squash_en;
   logic [15:0]                                squash_seq;
 
+  logic                                       spec_wakeup_valid;
+  logic [TAG_WIDTH-1:0]                       spec_wakeup_tag;
+
   initial clk = 1'b0;
   always #5 clk = ~clk;
 
@@ -100,7 +103,9 @@ module tb_iq_top_directed;
       .issue_dst_tag     (issue_dst_tag),
       .issue_age         (issue_age),
       .squash_en         (squash_en),
-      .squash_seq        (squash_seq)
+      .squash_seq        (squash_seq),
+      .spec_wakeup_valid (spec_wakeup_valid),
+      .spec_wakeup_tag   (spec_wakeup_tag)
   );
 
   // =========================================================================
@@ -146,6 +151,16 @@ module tb_iq_top_directed;
       @(posedge clk);   // capturing edge
       #1;
       wakeup_valid = 1'b0;
+  endtask
+
+  task automatic do_spec_wakeup(input logic [TAG_WIDTH-1:0] tag);
+      @(posedge clk);
+      #1;
+      spec_wakeup_valid = 1'b1;
+      spec_wakeup_tag   = tag;
+      @(posedge clk);
+      #1;
+      spec_wakeup_valid = 1'b0;
   endtask
 
   // Wait one cycle and sample.
@@ -460,6 +475,30 @@ module tb_iq_top_directed;
   endtask
 
   // =========================================================================
+  // Test 10: speculative_wakeup — dependent instruction issues on spec_wakeup
+  // =========================================================================
+  // Dispatch an entry, then wake it up speculatively. Verify it issues correctly.
+  task automatic test_speculative_wakeup;
+      logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
+      $display("\n[TEST] test_speculative_wakeup: dependent issues early");
+
+      // Dispatch non-ready entry waiting on tag 0x55
+      src[0] = 'h55;  src[1] = 'h0;
+      do_dispatch('h66, src, 2'b10);
+
+      `CHK(issue_valid[0] === 1'b0, "spec: not ready before spec wakeup");
+
+      // Broadcast speculative wakeup for 0x55
+      do_spec_wakeup('h55);
+
+      // Verify it issues immediately
+      `CHK(issue_valid[0] === 1'b1, "spec: issues on speculative wakeup");
+      `CHK(issue_dst_tag[0] === 'h66, "spec: correct tag on issue bus");
+
+      tick();
+  endtask
+
+  // =========================================================================
   // Main
   // =========================================================================
   initial begin
@@ -469,6 +508,8 @@ module tb_iq_top_directed;
       dispatch_src_imm = '0;
       wakeup_valid     = 1'b0;
       wakeup_tag       = '0;
+      spec_wakeup_valid= 1'b0;
+      spec_wakeup_tag  = '0;
       squash_en        = 1'b0;
       squash_seq       = '0;
 
@@ -481,6 +522,7 @@ module tb_iq_top_directed;
       do_reset();  test_age_ordering();
       do_reset();  test_slot_reuse();
       do_reset();  test_squash_selective();
+      do_reset();  test_speculative_wakeup();
 
       $display("\n============================================================");
       if (errors == 0)
