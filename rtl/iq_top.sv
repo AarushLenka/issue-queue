@@ -62,6 +62,31 @@
 //   trivially fast. The deterministic allocation order simplifies waveform
 //   analysis during development. Round-robin becomes attractive only at
 //   DEPTH≥64 for power uniformity.
+//
+// =============================================================================
+// THE REPLAY PROBLEM (Step 6 Architectural Note)
+// =============================================================================
+// This module exposes a speculative wakeup bus (`spec_wakeup_valid`). 
+// Speculative wakeup allows a dependent instruction to wake up and issue
+// *before* the producer's data is actually written to the register file,
+// effectively hiding ALU or cache latency.
+//
+// However, if the producer's speculation fails (e.g., a cache miss or variable
+// ALU latency condition), the consumer's execution is invalid. This is called
+// a "replay" event.
+//
+// Full Replay Architecture requires two major components:
+// 1. Poison Tracking: A way to broadcast a "kill" signal for the speculated tag.
+// 2. Storage for Replay: When an instruction issues, it normally leaves the 
+//    issue queue (its slot is freed). To replay it, we either:
+//      a) Keep it in the Issue Queue (non-destructive issue) until it is 
+//         "verified", which clogs the queue and complicates the free-vector.
+//      b) Move it to a dedicated Replay Queue, which adds massive routing and
+//         muxing overhead.
+//
+// In this project, we implement the speculative wakeup path to demonstrate the
+// timing benefits, but we omit the structural storage for a full replay loop 
+// as a conscious architectural scope reduction.
 // =============================================================================
 
 `ifndef IQ_TOP_SV
@@ -103,6 +128,8 @@ module iq_top #(
     // Wakeup inputs (from execution writeback):
     input  logic                               wakeup_valid,
     input  logic [TAG_WIDTH-1:0]               wakeup_tag,
+    input  logic                               spec_wakeup_valid,
+    input  logic [TAG_WIDTH-1:0]               spec_wakeup_tag,
 
     // Issue outputs (to execution units):
     output logic [NUM_PORTS-1:0]                          issue_valid,
@@ -254,6 +281,8 @@ module iq_top #(
 
         .wakeup_valid      (wakeup_valid),
         .wakeup_tag        (wakeup_tag),
+        .spec_wakeup_valid (spec_wakeup_valid),
+        .spec_wakeup_tag   (spec_wakeup_tag),
 
         .issue_grant       (sel_grant),
         .issue_idx         (sel_idx),

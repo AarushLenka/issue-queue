@@ -55,6 +55,8 @@ module iq_entry #(
     // --- Wakeup snoop (global broadcast; every entry sees the same bus) -----
     input  logic                               wakeup_valid,
     input  logic [TAG_WIDTH-1:0]               wakeup_tag,
+    input  logic                               spec_wakeup_valid,
+    input  logic [TAG_WIDTH-1:0]               spec_wakeup_tag,
 
     // --- Clear events --------------------------------------------------------
     // issue_clear  : this entry was granted by the selector this cycle.
@@ -132,12 +134,14 @@ module iq_entry #(
     // content-addressable memory: you query "who has tag 5?" and every
     // entry answers in parallel. Here each source is a tiny CAM line.)
     logic [NUM_SRC-1:0] wakeup_hit;
+    logic [NUM_SRC-1:0] spec_wakeup_hit;
     always_comb begin : wakeup_compare
         for (int i = 0; i < NUM_SRC; i++) begin
             // wakeup_hit[i] fires when the broadcast tag matches source i's
             // producer tag. Using the EFFECTIVE tag is what makes the
             // same-cycle bypass work — see the big comment block above.
             wakeup_hit[i] = wakeup_valid && (wakeup_tag == src_tag_eff[i]);
+            spec_wakeup_hit[i] = spec_wakeup_valid && (spec_wakeup_tag == src_tag_eff[i]);
         end
     end
 
@@ -168,7 +172,11 @@ module iq_entry #(
             entry_r.valid     <= 1'b1;
             entry_r.dst_tag   <= dispatch_dst_tag;
             entry_r.src_tag   <= dispatch_src_tag;
-            entry_r.src_ready <= dispatch_src_imm | wakeup_hit;
+            // Both normal and speculative wakeups can set the ready bit. 
+            // In a full replay architecture, we would also need to track whether
+            // we became ready speculatively, so we know to flush this entry 
+            // if the speculation fails (a "poison" or "replay" bit).
+            entry_r.src_ready <= dispatch_src_imm | wakeup_hit | spec_wakeup_hit;
             entry_r.age       <= '0;
             entry_r.disp_seq  <= dispatch_disp_seq;   // monotonic sequence number for squash comparison
         end else if (issue_clear || squash_clear) begin
@@ -183,7 +191,7 @@ module iq_entry #(
             // new hits this cycle. Saturating age: count up to all-ones then
             // hold — that all-ones value is the "I am very old" sentinel the
             // selector understands (see iq_pkg::age_older_than).
-            entry_r.src_ready <= entry_r.src_ready | wakeup_hit;
+            entry_r.src_ready <= entry_r.src_ready | wakeup_hit | spec_wakeup_hit;
             entry_r.age       <= (entry_r.age == iq_pkg::AGE_SAT_MAX)
                                   ? iq_pkg::AGE_SAT_MAX
                                   : entry_r.age + 1'b1;

@@ -126,6 +126,8 @@ module tb_iq_entry;
       .dispatch_disp_seq(16'd0),          // not tested here; squash uses iq_top's counter
       .wakeup_valid     (wakeup_valid),
       .wakeup_tag       (wakeup_tag),
+      .spec_wakeup_valid(1'b0),
+      .spec_wakeup_tag  ({TAG_WIDTH{1'b0}}),
       .issue_clear      (issue_clear),
       .squash_clear     (squash_clear),
       .entry_o          (entry_o),
