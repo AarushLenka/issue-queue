@@ -14,7 +14,7 @@
 //     makes the entry ready, NOT after an additional tick. The issued entry
 //     is gone after the next posedge.
 //
-//   Test catalog (8 directed tests):
+//   Test catalog (9 directed tests):
 //     1. single_chain     : A→B dependency chain
 //     2. multi_ready      : 3 entries ready at same time, oldest issues first
 //     3. backpressure     : fill queue, stall, free by issue
@@ -23,6 +23,7 @@
 //     6. multi_port_issue : 2 entries issue via 2 ports same cycle
 //     7. age_ordering     : older entry issues first
 //     8. slot_reuse       : freed slot reused by next dispatch
+//     9. squash_selective : Step 5 — partial squash by disp_seq, survivor + slot reuse
 // =============================================================================
 
 `timescale 1ns/1ps
@@ -72,6 +73,7 @@ module tb_iq_top_directed;
   logic [TB_NUM_PORTS-1:0][AGE_WIDTH-1:0]     issue_age;
 
   logic                                       squash_en;
+  logic [15:0]                                squash_seq;
 
   initial clk = 1'b0;
   always #5 clk = ~clk;
@@ -97,7 +99,8 @@ module tb_iq_top_directed;
       .issue_idx         (issue_idx),
       .issue_dst_tag     (issue_dst_tag),
       .issue_age         (issue_age),
-      .squash_en         (squash_en)
+      .squash_en         (squash_en),
+      .squash_seq        (squash_seq)
   );
 
   // =========================================================================
@@ -163,42 +166,20 @@ module tb_iq_top_directed;
       do_dispatch('h01, src, 2'b10);
 
       // DEBUG: dump all entry state after dispatch
-      $display("  [DBG] After dispatch A:");
       for (int i = 0; i < TB_DEPTH; i++) begin
-          $display("    entry[%0d]: valid=%b src_ready=%b dst_tag=%h age=%0d src_tag[0]=%h src_tag[1]=%h",
-              i,
-              dut.u_cam.entry_array_o[i].valid,
-              dut.u_cam.entry_array_o[i].src_ready,
-              dut.u_cam.entry_array_o[i].dst_tag,
-              dut.u_cam.entry_array_o[i].age,
-              dut.u_cam.entry_array_o[i].src_tag[0],
-              dut.u_cam.entry_array_o[i].src_tag[1]);
+          if (dut.u_cam.entry_array_o[i].valid)
+              $display("    entry[%0d]: valid=%b src_ready=%b dst_tag=%h disp_seq=%0d",
+                  i,
+                  dut.u_cam.entry_array_o[i].valid,
+                  dut.u_cam.entry_array_o[i].src_ready,
+                  dut.u_cam.entry_array_o[i].dst_tag,
+                  dut.u_cam.entry_array_o[i].disp_seq);
       end
-      $display("    ready_array=%b  free_vec=%b  alloc_idx=%0d",
-          dut.ready_array, dut.free_vec, dut.alloc_idx);
-      $display("    issue_valid=%b  sel_grant=%b  dispatch_ready=%b",
-          issue_valid, dut.sel_grant, dispatch_ready);
 
       `CHK(issue_valid[0] === 1'b0, "chain: A not ready before wakeup");
 
       // Wake A's src0
       do_wakeup('h10);
-
-      // DEBUG: dump state after wakeup
-      $display("  [DBG] After wakeup 0x10:");
-      for (int i = 0; i < TB_DEPTH; i++) begin
-          if (dut.u_cam.entry_array_o[i].valid)
-              $display("    entry[%0d]: valid=%b src_ready=%b dst_tag=%h age=%0d",
-                  i,
-                  dut.u_cam.entry_array_o[i].valid,
-                  dut.u_cam.entry_array_o[i].src_ready,
-                  dut.u_cam.entry_array_o[i].dst_tag,
-                  dut.u_cam.entry_array_o[i].age);
-      end
-      $display("    ready_array=%b  issue_valid=%b  sel_grant=%b",
-          dut.ready_array, issue_valid, dut.sel_grant);
-      $display("    issue_dst_tag[0]=%h  issue_idx[0]=%0d",
-          issue_dst_tag[0], issue_idx[0]);
 
       `CHK(issue_valid[0] === 1'b1, "chain: A issues after wakeup");
       `CHK(issue_dst_tag[0] === 'h01, "chain: A dst_tag on issue bus");
@@ -414,6 +395,71 @@ module tb_iq_top_directed;
   endtask
 
   // =========================================================================
+  // Test 9: squash_selective — squash younger entries, keep older
+  // =========================================================================
+  // Dispatch 3 entries (A=seq0, B=seq1, C=seq2). Squash with threshold
+  // seq=0 → only B(seq1) and C(seq2) should be flushed. A survives.
+  task automatic test_squash_selective;
+      logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src;
+      $display("\n[TEST] test_squash_selective: squash younger, keep older");
+
+      // Dispatch 3 non-ready entries sharing src0=0x3E (src1 immediate).
+      // The global disp_seq counter in iq_top starts at 0 post-reset and ticks
+      // once per accepted dispatch, so A=seq0, B=seq1, C=seq2. Allocation is
+      // lowest-free-first → A→slot0, B→slot1, C→slot2.
+      src[0] = 'h3E;  src[1] = 'h0;
+      do_dispatch('h01, src, 2'b10);  // A: seq0
+      do_dispatch('h02, src, 2'b10);  // B: seq1
+      do_dispatch('h03, src, 2'b10);  // C: seq2
+
+      // All three live in the queue before the squash.
+      `CHK(dut.u_cam.entry_array_o[0].valid === 1'b1, "squash: A valid before squash");
+      `CHK(dut.u_cam.entry_array_o[1].valid === 1'b1, "squash: B valid before squash");
+      `CHK(dut.u_cam.entry_array_o[2].valid === 1'b1, "squash: C valid before squash");
+
+      // Squash with threshold seq=0. The compare is STRICT: disp_seq > 0.
+      // A (seq 0 == threshold) SURVIVES — dispatched AT/BEFORE the mispredicted
+      // branch. B (seq1) and C (seq2) are strictly younger → wrong path → flush.
+      @(posedge clk);
+      #1;
+      squash_en  = 1'b1;
+      squash_seq = 16'd0;
+      @(posedge clk);  // capturing edge: B,C cleared, A retained
+      #1;
+      squash_en = 1'b0;
+
+      // Exactly the younger entries die; the older one lives.
+      `CHK(dut.u_cam.entry_array_o[0].valid === 1'b1, "squash: A survives (seq0 <= threshold)");
+      `CHK(dut.u_cam.entry_array_o[1].valid === 1'b0, "squash: B flushed (seq1 > threshold)");
+      `CHK(dut.u_cam.entry_array_o[2].valid === 1'b0, "squash: C flushed (seq2 > threshold)");
+
+      // free_vec mirrors the CAM: slots 1 and 2 (squashed) are free again,
+      // slot 0 still holds A. has_free=1 → dispatch_ready=1.
+      `CHK(dispatch_ready === 1'b1, "squash: dispatch_ready=1 (2 slots freed)");
+
+      // Reuse a squash-freed slot BEFORE touching A. Slot 0 is still occupied
+      // by A, so the priority allocator's lowest-free pick is slot 1 — the very
+      // slot B was squashed out of. This proves free_vec and the CAM's per-entry
+      // squash_clear stayed in sync and the freed slot is reusable immediately.
+      // D waits on a DIFFERENT src tag (0x3D) so the upcoming wake of 0x3E
+      // reaches only A and D stays asleep — keeping the survivor-issue check
+      // below unambiguous.
+      src[0] = 'h3D;  src[1] = 'h0;
+      do_dispatch('h04, src, 2'b10);  // D → slot1, seq3
+      `CHK(dut.u_cam.entry_array_o[1].valid   === 1'b1,  "squash: D reuses squash-freed slot 1");
+      `CHK(dut.u_cam.entry_array_o[1].dst_tag === 'h04,  "squash: D correct tag in reused slot");
+
+      // The survivor A is untouched by squash: wake its src0 and confirm it
+      // issues the cycle after. D (different src) must stay not-ready.
+      do_wakeup('h3E);
+      `CHK(issue_valid[0]   === 1'b1, "squash: A issues after surviving squash");
+      `CHK(issue_dst_tag[0] === 'h01, "squash: A's tag correct post-squash");
+      `CHK(issue_valid[1]   === 1'b0, "squash: D not ready (different src tag)");
+
+      tick();
+  endtask
+
+  // =========================================================================
   // Main
   // =========================================================================
   initial begin
@@ -424,6 +470,7 @@ module tb_iq_top_directed;
       wakeup_valid     = 1'b0;
       wakeup_tag       = '0;
       squash_en        = 1'b0;
+      squash_seq       = '0;
 
       do_reset();  test_single_chain();
       do_reset();  test_multi_ready();
@@ -433,6 +480,7 @@ module tb_iq_top_directed;
       do_reset();  test_multi_port_issue();
       do_reset();  test_age_ordering();
       do_reset();  test_slot_reuse();
+      do_reset();  test_squash_selective();
 
       $display("\n============================================================");
       if (errors == 0)

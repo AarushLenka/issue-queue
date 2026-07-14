@@ -107,11 +107,13 @@ module tb_iq_wakeup_cam;
       .dispatch_dst_tag  (dispatch_dst_tag),
       .dispatch_src_tag  (dispatch_src_tag),
       .dispatch_src_imm  (dispatch_src_imm),
+      .dispatch_disp_seq (16'd0),
       .wakeup_valid      (wakeup_valid),
       .wakeup_tag        (wakeup_tag),
       .issue_grant       (issue_grant),
       .issue_idx         (issue_idx),
       .squash_en         (squash_en),
+      .squash_seq        (16'd0),
       .entry_array_o     (entry_array_o),
       .ready_array_o     (ready_array_o)
   );

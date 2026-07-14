@@ -93,6 +93,7 @@ module iq_wakeup_cam #(
     input  logic [TAG_WIDTH-1:0]               dispatch_dst_tag,
     input  logic [NUM_SRC-1:0][TAG_WIDTH-1:0]  dispatch_src_tag,
     input  logic [NUM_SRC-1:0]                 dispatch_src_imm,
+    input  logic [15:0]                        dispatch_disp_seq,
 
     // --- Wakeup broadcast (from execution writeback) ------------------------
     // One bus for now; extending to multiple buses is a parameter change plus
@@ -107,8 +108,14 @@ module iq_wakeup_cam #(
     input  logic [NUM_PORTS-1:0]                        issue_grant,
     input  logic [NUM_PORTS-1:0][$clog2(DEPTH)-1:0]     issue_idx,
 
-    // --- Squash (Step 5 — tied to 0 until then) -----------------------------
+    // --- Squash (age-threshold based) ----------------------------------------
+    // squash_en : active-high, a branch misprediction occurred.
+    // squash_seq: dispatch sequence number of the mispredicted branch.
+    //            All entries with disp_seq > squash_seq are younger than the
+    //            misprediction and must be flushed. Entries with disp_seq <=
+    //            squash_seq are older (dispatched before the branch) and survive.
     input  logic                               squash_en,
+    input  logic [15:0]                        squash_seq,
 
     // --- Per-entry state (read by the selector every cycle) -----------------
     // Packed arrays: entry_array_o[i] is the full struct for entry i,
@@ -150,6 +157,49 @@ module iq_wakeup_cam #(
     end
 
     // =========================================================================
+    // Per-entry squash comparison
+    // =========================================================================
+    // WHY NOT USE THE AGE COUNTER FOR SQUASH (the "monotonicity problem"):
+    //
+    //   The per-entry `age` counter starts at 0 on dispatch and increments
+    //   each cycle, saturating at AGE_SAT_MAX. This makes it:
+    //     - NON-MONOTONIC across entries: two entries dispatched 3 cycles
+    //       apart both start at age=0, so at any given instant their ages
+    //       differ by 3, but that difference is lost once both saturate.
+    //     - NON-UNIQUE: after saturation, multiple entries share AGE_SAT_MAX.
+    //     - RESETS on dispatch: a slot that is freed and reused starts age=0
+    //       again, breaking any ordering relationship with its previous tenant.
+    //
+    //   For squash, we need to answer: "was this entry dispatched BEFORE or
+    //   AFTER the mispredicted branch?" This requires a GLOBALLY MONOTONIC
+    //   ordering that never resets — exactly what the age counter doesn't
+    //   provide.
+    //
+    //   Solution: a separate 16-bit dispatch sequence number (disp_seq),
+    //   assigned from a global counter in iq_top. It increments once per
+    //   dispatch and never resets (except on full pipeline flush). Each
+    //   entry stores its disp_seq at dispatch time. On squash, we compare:
+    //     squash_clear = squash_en && (entry.disp_seq > squash_seq)
+    //   This correctly identifies entries dispatched after the branch.
+    //
+    //   16 bits gives 65536 dispatches before wraparound — at 1 dispatch/cycle
+    //   and 1 GHz, that's 65 µs. A full pipeline flush on wrap (or modular
+    //   arithmetic with half-range comparison) handles this edge case.
+    // =========================================================================
+    logic [DEPTH-1:0] squash_clear_oh;
+
+    always_comb begin : squash_decode
+        for (int i = 0; i < DEPTH; i++) begin
+            // Squash entries dispatched AFTER the mispredicted branch.
+            // entry_array_o is combinational from entry_r, so we can read
+            // disp_seq directly. Only valid entries can be squashed.
+            squash_clear_oh[i] = squash_en
+                               && entry_array_o[i].valid
+                               && (entry_array_o[i].disp_seq > squash_seq);
+        end
+    end
+
+    // =========================================================================
     // Entry array instantiation
     // =========================================================================
     // WHAT IS `generate`: a compile-time construct that replicates hardware.
@@ -166,8 +216,8 @@ module iq_wakeup_cam #(
     //     because only the we=1 entry will latch it
     //   - the SAME wakeup bus — this IS the broadcast; every entry snoops
     //   - issue_clear from the issue one-hot decode
-    //   - squash_clear tied to squash_en for now (Step 5 will make this
-    //     per-entry based on dispatch sequence number comparison)
+    //   - squash_clear per-entry from squash_clear_oh (Step 5): only entries
+    //     whose disp_seq is strictly > squash_seq are gated.
 
     genvar gi;
     generate
@@ -187,6 +237,7 @@ module iq_wakeup_cam #(
                 .dispatch_dst_tag (dispatch_dst_tag),
                 .dispatch_src_tag (dispatch_src_tag),
                 .dispatch_src_imm (dispatch_src_imm),
+                .dispatch_disp_seq(dispatch_disp_seq),
 
                 // Wakeup: TRUE broadcast — every entry gets the same bus.
                 // This is the distributed CAM in action: the bus fans out,
@@ -197,7 +248,7 @@ module iq_wakeup_cam #(
 
                 // Clear signals: per-entry from the one-hot decodes.
                 .issue_clear      (issue_clear_oh[gi]),
-                .squash_clear     (squash_en),     // Step 5: per-entry gating
+                .squash_clear     (squash_clear_oh[gi]),  // per-entry: only younger-than-branch
 
                 // State output: feeds the selector (Step 3) and debug.
                 .entry_o          (entry_array_o[gi]),
