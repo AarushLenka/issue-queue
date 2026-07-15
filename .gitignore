@@ -25,3 +25,6 @@ jgproject/
 *.o
 *.sim
 *.key
+
+# Local tutorial and interview prep guides (not for Git)
+ELI5_GUIDE.md
