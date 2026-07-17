@@ -7,27 +7,11 @@
 //     1. Dispatch unit (writes new entries into the queue)
 //     2. Execution/writeback (broadcasts wakeup tags)
 //     3. Execution units (read issued instructions)
-//
-//   Each neighbor sees the bundle through a `modport` — a customized view
-//   that lists only the signals that neighbor is allowed to touch, with
-//   directions fixed from THAT neighbor's perspective.
-//
-//   This makes the bus contract unambiguous at the type level: a module
-//   declared with `dispatch_mp vif` literally cannot drive a wakeup signal
-//   by accident. Compile-time error > runtime X-prop.
-//
-// This is your first real exposure to SystemVerilog interfaces and modports.
-// Comments call out each new construct the first time it appears.
 // =============================================================================
 
 `ifndef IQ_IF_SV
 `define IQ_IF_SV
 
-// WHAT IS AN INTERFACE: a named bundle of signals + (optionally) modports,
-// clocking blocks, and assertions that travel together. You `instantiate` it
-// once and pass the whole handle to every connected module, instead of
-// re-declaring each wire in every port list of every module.
-//
 // We pull TYPE parameters (TAG_WIDTH, NUM_SRC, NUM_PORTS) from `iq_pkg`.
 // DEPTH is taken explicitly because the interface allocates index buses
 // sized by DEPTH (issue_idx, dispatch_slot_idx), and most testbenches want
@@ -43,8 +27,6 @@ interface iq_if #(
     // -------------------------------------------------------------------------
     // Local derived widths
     // -------------------------------------------------------------------------
-    // $clog2(N) returns ceil(log2(N)) and is the canonical way to size an
-    // index bus that addresses N items. For DEPTH=16, $clog2(DEPTH)=4.
     localparam int unsigned IDX_WIDTH = (DEPTH <= 1) ? 1 : $clog2(DEPTH);
 
     // -------------------------------------------------------------------------
@@ -97,14 +79,6 @@ interface iq_if #(
     // -------------------------------------------------------------------------
     // MODPORTS — restricted views per connected module
     // -------------------------------------------------------------------------
-    // WHAT IS A MODPORT: a named projection of an interface that lists each
-    // signal as input/output FROM THE MODULE THAT USES THE MODPORT's view.
-    // A signal listed as `output` inside a modport is driven by the module
-    // that instantiated the interface with that modport; `input` is read.
-    //
-    // This is the interface equivalent of a "port list" on a module. Without
-    // modports, every connected module could see every signal as a `logic`
-    // inside the interface scope, which defeats the encapsulation.
 
     // dispatch_mp — view used by the dispatch unit module
     modport dispatch_mp (

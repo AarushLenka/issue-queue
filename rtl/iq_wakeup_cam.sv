@@ -1,71 +1,17 @@
 // =============================================================================
-// iq_wakeup_cam.sv — Wakeup CAM: Broadcast-Match Array (Step 2)
+// iq_wakeup_cam.sv — Wakeup CAM: Broadcast-Match Array
 // =============================================================================
 // Purpose:
 //   This module instantiates DEPTH iq_entry modules and fans the wakeup bus
 //   (wakeup_valid + wakeup_tag) to ALL of them in parallel. Every entry
 //   performs its own tag comparison independently.
 //
-// =============================================================================
-// DESIGN DECISION: CENTRALIZED vs. DISTRIBUTED comparators
-// =============================================================================
-//
-// The "partition question" from CLAUDE.md: where does the tag-compare logic
-// for wakeup live?
-//
-//   OPTION A — CENTRALIZED ("here, in iq_wakeup_cam"):
-//     A single block of O(DEPTH × NUM_SRC) comparators, one per
-//     (entry, source) pair. The result is a DEPTH×NUM_SRC hit matrix
-//     that is sent back to each entry as a per-source "you matched" signal.
-//
-//     Upside: all comparison logic in one place, easier to retime or
-//     pipeline later.
-//
-//     Downside: routing NIGHTMARE. Every entry's src_tag[i] (TAG_WIDTH bits
-//     × NUM_SRC sources) has to travel FROM the entry TO this central block
-//     (long fan-out wires), and then the hit vector has to travel BACK.
-//     With DEPTH=16, NUM_SRC=2, TAG_WIDTH=6: that's 16×2×6 = 192 wires
-//     going IN, plus 16×2 = 32 hit wires going OUT. Scale to DEPTH=64,
-//     TAG_WIDTH=7: 64×2×7 = 896 wires in. The routing congestion and
-//     wire delay dominate — you lose the cycle time you were trying to save.
-//
-//   OPTION B — DISTRIBUTED ("inside each iq_entry", what we chose):
-//     Each entry has NUM_SRC comparators sitting RIGHT NEXT to its src_tag
-//     registers. The wakeup bus (just wakeup_valid + wakeup_tag = 1+6 = 7
-//     wires) fans out globally to all entries — fan-out is cheap because
-//     it's a single bus driving repeater-buffered copies.
-//
-//     Upside: minimal routing — each comparator reads local register state
-//     (zero-length wire), and the result (wakeup_hit) feeds directly into
-//     the adjacent always_ff block. Scales linearly: doubling DEPTH just
-//     doubles the number of LOCAL comparators with no increase in cross-chip
-//     wiring. This is how real OoO cores (Alpha 21264, BOOM, Arm A77) do it.
-//
-//     Downside: harder to centrally observe all hits (for debug or SVA) —
-//     but we expose entry_o and ready_o per-entry, so this is fine.
-//
-//   COST MODEL: O(DEPTH × NUM_SRC × NUM_WAKEUP_BUSES) comparators total,
-//   regardless of centralized vs. distributed. With DEPTH=16, NUM_SRC=2,
-//   NUM_WAKEUP_BUSES=1: 16 × 2 × 1 = 32 TAG_WIDTH-bit comparators.
-//   Each is a 6-bit equality check (six 2-input XNORs + AND-reduction) —
-//   roughly 12 gates per comparator × 32 = ~384 gates. Trivial area.
-//   The WIRING is what differentiates the approaches, not the comparator count.
-//
-//   DECISION: Distributed (Option B). Comparators already live inside
-//   iq_entry from Step 1. This module's role is therefore NOT to compare,
-//   but to INSTANTIATE the entry array and ROUTE control signals.
-//
-// =============================================================================
 // What this module actually does:
 //   1. Instantiates DEPTH iq_entry modules (the "entry array").
 //   2. Fans the global wakeup bus to all entries (broadcast).
 //   3. Fans dispatch signals to the entry selected by dispatch_slot_idx.
 //   4. Fans issue_clear to entries selected by the selector grants.
 //   5. Exports per-entry state (entry_o[], ready_o[]) upward to the selector.
-//
-//   In Step 4 (iq_top), this module will sit between the dispatch allocator
-//   and the selector, receiving decoded instructions on one side and feeding
-//   ready-status to the arbiter on the other.
 // =============================================================================
 
 `ifndef IQ_WAKEUP_CAM_SV
@@ -162,33 +108,9 @@ module iq_wakeup_cam #(
     // =========================================================================
     // Per-entry squash comparison
     // =========================================================================
-    // WHY NOT USE THE AGE COUNTER FOR SQUASH (the "monotonicity problem"):
-    //
-    //   The per-entry `age` counter starts at 0 on dispatch and increments
-    //   each cycle, saturating at AGE_SAT_MAX. This makes it:
-    //     - NON-MONOTONIC across entries: two entries dispatched 3 cycles
-    //       apart both start at age=0, so at any given instant their ages
-    //       differ by 3, but that difference is lost once both saturate.
-    //     - NON-UNIQUE: after saturation, multiple entries share AGE_SAT_MAX.
-    //     - RESETS on dispatch: a slot that is freed and reused starts age=0
-    //       again, breaking any ordering relationship with its previous tenant.
-    //
-    //   For squash, we need to answer: "was this entry dispatched BEFORE or
-    //   AFTER the mispredicted branch?" This requires a GLOBALLY MONOTONIC
-    //   ordering that never resets — exactly what the age counter doesn't
-    //   provide.
-    //
-    //   Solution: a separate 16-bit dispatch sequence number (disp_seq),
-    //   assigned from a global counter in iq_top. It increments once per
-    //   dispatch and never resets (except on full pipeline flush). Each
-    //   entry stores its disp_seq at dispatch time. On squash, we compare:
-    //     squash_clear = squash_en && (entry.disp_seq > squash_seq)
-    //   This correctly identifies entries dispatched after the branch.
-    //
-    //   16 bits gives 65536 dispatches before wraparound — at 1 dispatch/cycle
-    //   and 1 GHz, that's 65 µs. A full pipeline flush on wrap (or modular
-    //   arithmetic with half-range comparison) handles this edge case.
-    //   arithmetic with half-range comparison) handles this edge case.
+    // Each entry stores its disp_seq at dispatch time. On squash, we compare:
+    //   squash_clear = squash_en && (entry.disp_seq > squash_seq)
+    // This correctly identifies entries dispatched after the branch.
     // =========================================================================
     logic [DEPTH-1:0] squash_clear_oh; // Bitvector indicating which entries are younger than the mispredicted branch and must be flushed
 
@@ -206,22 +128,13 @@ module iq_wakeup_cam #(
     // =========================================================================
     // Entry array instantiation
     // =========================================================================
-    // WHAT IS `generate`: a compile-time construct that replicates hardware.
-    // The `for` inside `generate` runs at ELABORATION, not at runtime — it
-    // stamps out DEPTH independent iq_entry modules, each with its own
-    // registers, comparators, and wiring. The resulting netlist has no loop;
-    // it's DEPTH parallel copies. `genvar` is the loop variable type required
-    // by the generate construct (it exists only at elaboration, not in the
-    // final hardware).
-    //
     // Each entry receives:
     //   - dispatch_we from the one-hot decode (only ONE entry gets we=1)
-    //   - the SAME dispatch payload (dst_tag, src_tag, src_imm) — harmless
-    //     because only the we=1 entry will latch it
-    //   - the SAME wakeup bus — this IS the broadcast; every entry snoops
+    //   - the SAME dispatch payload (dst_tag, src_tag, src_imm)
+    //   - the SAME wakeup bus (broadcast)
     //   - issue_clear from the issue one-hot decode
-    //   - squash_clear per-entry from squash_clear_oh (Step 5): only entries
-    //     whose disp_seq is strictly > squash_seq are gated.
+    //   - squash_clear per-entry from squash_clear_oh
+    // =========================================================================
 
     genvar gi; // Generate variable used to stamp out DEPTH instances of iq_entry at elaboration time
     generate

@@ -1,5 +1,5 @@
 // =============================================================================
-// iq_entry.sv — One Issue-Queue Entry (Step 1)
+// iq_entry.sv — One Issue-Queue Entry
 // =============================================================================
 // Purpose:
 //   Holds exactly ONE in-flight instruction and tracks whether each of its
@@ -7,25 +7,11 @@
 //   cubby on the shelf — an order sits here until all its ingredients arrive,
 //   then it's eligible to be picked (issued) by the selector.
 //
-//   Responsibilities (CLAUDE.md Step 1):
+//   Responsibilities:
 //     1. Dispatch write  : load a new instruction when this slot is allocated.
-//     2. Wakeup snoop   : per-source CAM-style tag compare; set src_ready[i]
-//                         when a matching tag broadcasts on the wakeup bus.
+//     2. Wakeup snoop   : per-source tag compare; set src_ready[i] when a match broadcasts.
 //     3. Age increment  : saturating counter, ticks every cycle while valid.
 //     4. Clear on issue/squash: drop the entry when it issues or is flushed.
-//
-//   THE BIG IDEA for this step is the same-cycle dispatch+wakeup BYPASS,
-//   explained in detail where it is implemented below. Read that comment
-//   block carefully — it is the interview-worthy part of Step 1.
-//
-//   Why explicit ports (not the iq_if interface) here:
-//     iq_if.sv bundles the WHOLE queue's bus for the top level. A single
-//     entry only needs its own sliver: one dispatch-we, the global wakeup
-//     bus, an issue/squash clear, and its own state output. Wiring a full
-//     interface into a leaf would expose signals the entry must never
-//     touch. Leaf modules take explicit ports; the top level (Step 4)
-//     fans the interface out to all entries. This contrast is itself a
-//     lesson: interface = inter-module bundling, ports = intra-module API.
 // =============================================================================
 
 `ifndef IQ_ENTRY_SV
@@ -61,7 +47,6 @@ module iq_entry #(
     // --- Clear events --------------------------------------------------------
     // issue_clear  : this entry was granted by the selector this cycle.
     // squash_clear : this entry is being flushed — gated per-entry by the CAM
-    //                 (Step 5): only entries with disp_seq > squash_seq clear.
     input  logic                               issue_clear,        // Signal from selector to invalidate this entry upon issue
     input  logic                               squash_clear,       // Signal to flush this entry during a pipeline squash
 
@@ -77,49 +62,18 @@ module iq_entry #(
     iq_pkg::iq_entry_t entry_r; // Internal register storing the state of this entry
 
     // =========================================================================
-    // SAME-CYCLE DISPATCH + WAKEUP BYPASS — read this twice
+    // SAME-CYCLE DISPATCH + WAKEUP BYPASS
     // =========================================================================
-    // The corner case:
-    //   Cycle N: this slot is the dispatch target (dispatch_we=1) carrying a
-    //   payload whose src_tag[0]=5. Simultaneously, a wakeup bus broadcasts
-    //   wakeup_tag=5 — some producer just completed and is announcing "tag 5
-    //   is ready".
-    //
-    //   NAIVE (WRONG) design: the wakeup comparator reads the REGISTERED
-    //   src_tag[] — but that still holds the OLD (stale) value until the end
-    //   of cycle N. The comparator compares wakeup_tag=5 against garbage,
-    //   misses, and src_ready[0] is never set. The freshly-dispatched entry
-    //   is now stuck waiting for a "tag 5 ready" broadcast that already came
-    //   and went. If no other instruction ever produces tag 5 again, the
-    //   entry DEADLOCKS — a lost-wakeup bug. This is exactly the class of
-    //   subtlety that makes out-of-order cores hard.
-    //
-    //   CORRECT (THIS) design: the comparator compares wakeup_tag against the
-    //   EFFECTIVE source tag — i.e. what src_tag[] WILL be next cycle:
-    //       src_tag_eff[i] = dispatch_we ? dispatch_src_tag[i]
-    //                                    : entry_r.src_tag[i]
-    //   So a wakeup broadcast in the same cycle as dispatch is caught by the
-    //   freshly-loaded payload. src_ready[0] is set at the end of cycle N,
-    //   the entry is fully ready in cycle N+1, and the selector can issue it.
-    //
-    //   DECISION: implement the bypass. Cost is one 2:1 mux per source feeding
-    //   the existing comparator — trivial. The alternative (no bypass, hope
-    //   the broadcast repeats) is a correctness hazard. Real OoO cores do
-    //   exactly this; it is the mechanism that lets an instruction dispatched
-    //   the same cycle a producer issues catch that producer's wakeup.
-    //
-    //   Timing note: this makes the entry READY one cycle AFTER dispatch
-    //   (registered). It does NOT create a combinational ready output —
-    //   ready_o reads the registered entry_r, so there is no combinational
-    //   loop back into the selector.
+    // The comparator compares wakeup_tag against the EFFECTIVE source tag
+    // (what src_tag[] WILL be next cycle). This prevents a lost-wakeup bug
+    // if a producer broadcasts its tag in the same cycle this instruction
+    // is dispatched.
     // =========================================================================
 
     // Effective (next-cycle) source tags: bypass mux per source.
     logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src_tag_eff; // Next-cycle tags, bypassing stale registers for same-cycle wakeup
 
-    // The procedural `for` loop inside always_comb unrolls at elaboration
-    // because NUM_SRC is a compile-time constant — no runtime loop, no HW cost
-    // beyond the unrolled copies.
+    // Procedural for-loop unrolled into NUM_SRC bypass muxes
     always_comb begin : src_tag_eff_calc
         for (int i = 0; i < NUM_SRC; i++) begin
             src_tag_eff[i] = dispatch_we ? dispatch_src_tag[i]
@@ -127,12 +81,7 @@ module iq_entry #(
         end
     end
 
-    // Per-source wakeup hit. This is the "CAM-style compare": each source
-    // independently ANDs the bus-valid with a tag-equality check against its
-    // own effective tag. NUM_SRC independent comparators run in parallel —
-    // no priority among sources, they're peers. (The "CAM" name comes from
-    // content-addressable memory: you query "who has tag 5?" and every
-    // entry answers in parallel. Here each source is a tiny CAM line.)
+    // Per-source wakeup hit comparators
     logic [NUM_SRC-1:0] wakeup_hit;       // 1 if source i matches the normal broadcast tag
     logic [NUM_SRC-1:0] spec_wakeup_hit;  // 1 if source i matches the speculative broadcast tag
     always_comb begin : wakeup_compare
@@ -148,18 +97,8 @@ module iq_entry #(
     // =========================================================================
     // Sequential state update
     // =========================================================================
-    // This always_ff implements the four Step-1 behaviors. Priority order:
-    //   1. reset          -> zero everything
-    //   2. dispatch_we    -> load new payload (DOMINATES; handles same-cycle
-    //                        slot reuse where an issuing slot is redispatched)
-    //   3. issue/squash   -> invalidate (entry leaves the queue)
-    //   4. valid & idle   -> sticky wakeup OR + saturating age++
-    //
-    // Why dispatch dominates over issue_clear: in Step 4 the free-slot
-    // allocator may reuse a slot in the very cycle its old instruction issues
-    // ("same-cycle slot reuse", a real-core utilization trick). If both fire,
-    // the NEW instruction must win — it overwrites the issuing old one.
-    // Putting dispatch first in the if-else chain makes that fall out for free.
+    // Priority order: reset -> dispatch -> issue/squash -> age++.
+    // Dispatch dominates over issue_clear to support same-cycle slot reuse.
     // =========================================================================
     always_ff @(posedge clk or negedge rst_n) begin : entry_state
         if (!rst_n) begin
@@ -200,10 +139,7 @@ module iq_entry #(
     end
 
     // -------------------------------------------------------------------------
-    // Combinational outputs. ready_o uses the package helper so the
-    // "valid AND all-sources-ready" predicate is defined in exactly one place
-    // (the package) and shared by RTL, TB, and SVA. One definition = one
-    // place for a reviewer to check = one place for a bug to hide.
+    // Combinational outputs connecting entry state to the selector
     // -------------------------------------------------------------------------
     assign entry_o = entry_r;
     assign ready_o = iq_pkg::is_ready(entry_r);
