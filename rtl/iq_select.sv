@@ -1,5 +1,5 @@
 // =============================================================================
-// iq_select.sv — Age-Ordered Multi-Port Selector (Step 3)
+// iq_select.sv — Age-Ordered Multi-Port Selector
 // =============================================================================
 // Purpose:
 //   Given DEPTH entries with per-entry ready_i[] bits and age fields, select
@@ -12,69 +12,6 @@
 //   This is pure combinational logic — no state, no clock. It is called
 //   every cycle by iq_top, which feeds the results into the entry array
 //   as issue_clear signals.
-//
-// =============================================================================
-// DESIGN DECISION: PRIORITY-TREE vs. AGE-MATRIX (INTERVIEW Q&A)
-// =============================================================================
-//
-// The two classic approaches for oldest-first selection in an issue queue:
-//
-// --- APPROACH A: PRIORITY-TREE COMPARATOR (what we implement) ---------------
-//   Walk a pairwise reduction tree across all DEPTH entries. At each node,
-//   compare two candidates' ages and pass the older one up. The tree root
-//   is the globally-oldest ready entry. Depth = ceil(log2(DEPTH)) levels
-//   of 2:1 age-comparator + mux.
-//
-//   For DEPTH=16: 4 levels, 15 comparators total (a binary tree of 16 leaves
-//   has 15 internal nodes). Each comparator is an AGE_WIDTH-bit magnitude
-//   compare — about 2×AGE_WIDTH gates. Total ≈ 15 × 2×4 = 120 gates for
-//   the age comparison, plus 15 muxes for the index forwarding.
-//
-//   Pros:
-//     - Simple to implement and understand — it's just a tournament bracket.
-//     - Combinational delay is O(log(DEPTH)) — scales well for timing.
-//     - Stateless: no bookkeeping to maintain across cycles.
-//
-//   Cons:
-//     - Must recompute the entire tree from scratch every cycle, even if
-//       only one entry changed. Wasted work if the queue is mostly stable.
-//     - Multi-port extension requires masking and re-running (see Step 3b).
-//
-// --- APPROACH B: AGE-MATRIX (documented, not implemented) -------------------
-//   Maintain a DEPTH×DEPTH matrix M where M[i][j] = 1 iff entry i is older
-//   than entry j. Updated incrementally:
-//     - On dispatch of entry k: set M[k][*] = 0 (k is youngest vs. everyone),
-//       set M[*][k] = 1 (everyone is older than k).
-//     - On issue of entry k: clear row k and column k.
-//
-//   To find the oldest ready entry: for each ready entry i, AND-reduce
-//   row M[i][*] masked with valid bits. If all bits are 1, entry i is
-//   older than every other valid entry → it wins.
-//
-//   Pros:
-//     - Incremental update: the matrix is maintained cycle-over-cycle with
-//       O(DEPTH) writes per dispatch/issue, NOT recomputed from scratch.
-//     - Selection is a simple row AND-reduce + priority encode — no
-//       deep comparison tree.
-//     - Multi-port: mask out the first winner's column and re-AND-reduce
-//       for the next port (one extra gate delay per port, not a full retree).
-//
-//   Cons:
-//     - Storage: DEPTH² flip-flops for the matrix. DEPTH=16 → 256 FFs.
-//       DEPTH=64 → 4096 FFs. That's expensive in area for a small block.
-//     - Update logic: each dispatch/issue writes an entire row AND column —
-//       O(DEPTH) muxes on every matrix element. Routing congestion.
-//     - Harder to reason about correctness (is the matrix always consistent
-//       after a squash? after a same-cycle dispatch+issue?).
-//
-//   DECISION: Priority-tree (Approach A). At DEPTH≤32, the log2 timing and
-//   ~30 comparators are well within budget. The age-matrix becomes attractive
-//   only at DEPTH≥64 where the tree depth (6+ levels) starts to hurt cycle
-//   time, but the FF overhead is severe. For this project's scope, the tree
-//   is simpler to verify and explain. If asked in an interview: "I know the
-//   age-matrix alternative, here's the tradeoff, and I chose the tree because
-//   it's simpler at this queue depth."
-//
 // =============================================================================
 
 `ifndef IQ_SELECT_SV
@@ -108,7 +45,7 @@ module iq_select #(
     localparam int unsigned IDX_W = (DEPTH <= 1) ? 1 : $clog2(DEPTH);
 
     // =========================================================================
-    // Sub-step 3a: Single-port oldest-ready selection (priority-tree)
+    // Single-port oldest-ready selection (priority-tree)
     // =========================================================================
     // The tree compares pairs of entries bottom-up. At each node, the older
     // (higher age) entry wins. If ages are equal, the LOWER INDEX wins —
@@ -116,7 +53,7 @@ module iq_select #(
     // entries are dispatched in the same cycle (same starting age).
     //
     // The tree is implemented as a function so it can be called once per port
-    // with a different ready-mask (see Sub-step 3b for multi-port masking).
+    // with a different ready-mask.
     //
     // Returns {found, winner_idx} packed into IDX_W+1 bits.
     // found=1 means at least one ready entry exists; winner_idx is its index.
@@ -207,7 +144,7 @@ module iq_select #(
     endfunction
 
     // =========================================================================
-    // Sub-step 3b: Multi-port mutual exclusion
+    // Multi-port mutual exclusion
     // =========================================================================
     // For NUM_PORTS issue ports, we run the selection tree NUM_PORTS times.
     // After port p finds its winner, we MASK OUT that entry for port p+1:
@@ -220,30 +157,7 @@ module iq_select #(
     //
     // This guarantees mutual exclusion: no two ports select the same entry,
     // because each subsequent port can't see the previous winner.
-    //
-    // -------------------------------------------------------------------------
-    // FAIRNESS CAVEAT (INTERVIEW TALKING POINT):
-    //   Port 0 ALWAYS gets first pick (the globally-oldest ready entry).
-    //   Port 1 gets what's left. This means port 0 has PRIORITY over port 1.
-    //
-    //   Why this is usually acceptable:
-    //     - In real cores, different ports map to different execution unit TYPES
-    //       (e.g. port 0 = ALU, port 1 = load/store). An ALU instruction and
-    //       a load instruction don't compete — they go to different ports by
-    //       type. The "unfairness" only matters when two instructions of the
-    //       SAME type are both ready, and even then the age-ordering within
-    //       each port prevents starvation (the overlooked entry just gets
-    //       older and wins next cycle).
-    //     - Making ports truly FAIR (e.g. rotating which port picks first)
-    //       adds a mux on the mask chain and complicates timing. Not worth it
-    //       for the common case where port types don't overlap.
-    //
-    //   If you're asked "what if both ports serve the same unit type?":
-    //     Acknowledge the unfairness, note that age-ordering still prevents
-    //     starvation (just adds one cycle of latency to the second-oldest
-    //     instruction), and mention the rotating-priority extension as a
-    //     known fix if needed.
-    // -------------------------------------------------------------------------
+
 
     // The mask chain and per-port selection are computed in one always_comb
     // block so the synthesis tool can see the full combinational cone and
