@@ -53,28 +53,28 @@ module iq_entry #(
     input  logic [15:0]                        dispatch_disp_seq,
 
     // --- Wakeup snoop (global broadcast; every entry sees the same bus) -----
-    input  logic                               wakeup_valid,
-    input  logic [TAG_WIDTH-1:0]               wakeup_tag,
-    input  logic                               spec_wakeup_valid,
-    input  logic [TAG_WIDTH-1:0]               spec_wakeup_tag,
+    input  logic                               wakeup_valid,       // Global broadcast valid signal from execution unit writeback
+    input  logic [TAG_WIDTH-1:0]               wakeup_tag,         // Global broadcast tag to compare against entry's source tags
+    input  logic                               spec_wakeup_valid,  // Speculative broadcast valid signal
+    input  logic [TAG_WIDTH-1:0]               spec_wakeup_tag,    // Speculative broadcast tag for early wakeup
 
     // --- Clear events --------------------------------------------------------
     // issue_clear  : this entry was granted by the selector this cycle.
     // squash_clear : this entry is being flushed — gated per-entry by the CAM
     //                 (Step 5): only entries with disp_seq > squash_seq clear.
-    input  logic                               issue_clear,
-    input  logic                               squash_clear,
+    input  logic                               issue_clear,        // Signal from selector to invalidate this entry upon issue
+    input  logic                               squash_clear,       // Signal to flush this entry during a pipeline squash
 
     // --- State output (read by the selector each cycle) ---------------------
-    output iq_pkg::iq_entry_t                  entry_o,
-    output logic                               ready_o     // = is_ready(entry)
+    output iq_pkg::iq_entry_t                  entry_o,    // Full state of this entry broadcasted to the selector
+    output logic                               ready_o     // = is_ready(entry) - High when valid and all operands are ready
 );
 
     // -------------------------------------------------------------------------
     // Storage: the one entry's worth of state, as the packed struct from
     // the package. Declared as register storage typed by the struct.
     // -------------------------------------------------------------------------
-    iq_pkg::iq_entry_t entry_r;
+    iq_pkg::iq_entry_t entry_r; // Internal register storing the state of this entry
 
     // =========================================================================
     // SAME-CYCLE DISPATCH + WAKEUP BYPASS — read this twice
@@ -115,7 +115,7 @@ module iq_entry #(
     // =========================================================================
 
     // Effective (next-cycle) source tags: bypass mux per source.
-    logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src_tag_eff;
+    logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src_tag_eff; // Next-cycle tags, bypassing stale registers for same-cycle wakeup
 
     // The procedural `for` loop inside always_comb unrolls at elaboration
     // because NUM_SRC is a compile-time constant — no runtime loop, no HW cost
@@ -133,8 +133,8 @@ module iq_entry #(
     // no priority among sources, they're peers. (The "CAM" name comes from
     // content-addressable memory: you query "who has tag 5?" and every
     // entry answers in parallel. Here each source is a tiny CAM line.)
-    logic [NUM_SRC-1:0] wakeup_hit;
-    logic [NUM_SRC-1:0] spec_wakeup_hit;
+    logic [NUM_SRC-1:0] wakeup_hit;       // 1 if source i matches the normal broadcast tag
+    logic [NUM_SRC-1:0] spec_wakeup_hit;  // 1 if source i matches the speculative broadcast tag
     always_comb begin : wakeup_compare
         for (int i = 0; i < NUM_SRC; i++) begin
             // wakeup_hit[i] fires when the broadcast tag matches source i's

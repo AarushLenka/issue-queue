@@ -36,10 +36,10 @@ package iq_pkg;
   // AGE_WIDTH : width of the per-entry age counter. Explained in detail
   //             below — this is a deliberate design decision.
   // ---------------------------------------------------------------------------
-  parameter int unsigned TAG_WIDTH = 6;
-  parameter int unsigned NUM_SRC   = 2;
-  parameter int unsigned DEPTH     = 16;
-  parameter int unsigned NUM_PORTS = 2;
+  parameter int unsigned TAG_WIDTH = 6;  // 6-bit tag width for addressing up to 64 in-flight instruction destinations
+  parameter int unsigned NUM_SRC   = 2;  // Maximum 2 source operands per instruction (e.g., rs1 and rs2)
+  parameter int unsigned DEPTH     = 16; // 16 entries in the issue queue available for dispatch
+  parameter int unsigned NUM_PORTS = 2;  // 2 parallel execution ports available for issuing ready instructions
 
   // ---------------------------------------------------------------------------
   // AGE_WIDTH sizing decision — INTERVIEW Q&A WORTHY
@@ -70,9 +70,9 @@ package iq_pkg;
   // counts microseconds in real terms at GHz). If you deepen the queue to
   // say 64, AGE_WIDTH naturally grows to 6 bits — same rule.
   // ---------------------------------------------------------------------------
-  parameter int unsigned AGE_WIDTH = (DEPTH <= 16) ? 4
-                                   : (DEPTH <= 256) ? 8
-                                   : 12;
+  parameter int unsigned AGE_WIDTH = (DEPTH <= 16) ? 4   // Use 4 bits for age if queue depth is 16 or fewer
+                                   : (DEPTH <= 256) ? 8  // Scale to 8 bits for age if depth is up to 256
+                                   : 12;                 // Use 12 bits for very deep queues to prevent frequent saturation
 
   // Local parameter derived from AGE_WIDTH for use inside expressions.
   localparam logic [AGE_WIDTH-1:0] AGE_SAT_MAX = '1;  // all-ones = saturated
@@ -121,13 +121,13 @@ package iq_pkg;
   //                Declared here so the struct shape is stable across steps.
   // ---------------------------------------------------------------------------
   typedef struct packed {
-    logic [TAG_WIDTH-1:0]        dst_tag;
-    logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src_tag;
-    logic [NUM_SRC-1:0]          src_ready;
-    logic                        valid;
-    logic [AGE_WIDTH-1:0]        age;
-    logic [15:0]                 disp_seq;   // 16-bit dispatch sequence (Step 5)
-  } iq_entry_t;
+    logic [TAG_WIDTH-1:0]        dst_tag;    // Tag broadcasted on the wakeup bus when this instruction completes
+    logic [NUM_SRC-1:0][TAG_WIDTH-1:0] src_tag;    // Tags of the producer instructions this entry depends on
+    logic [NUM_SRC-1:0]          src_ready;  // One-hot ready status per source operand (1 = data is available)
+    logic                        valid;      // Indicates if this issue queue slot holds a live, undispatched instruction
+    logic [AGE_WIDTH-1:0]        age;        // Tracks cycles since dispatch for oldest-first arbitration
+    logic [15:0]                 disp_seq;   // 16-bit monotonic sequence number to determine relative dispatch order for flushing
+  } iq_entry_t;                              // Structure representing a single instruction's state in the queue
 
   // ---------------------------------------------------------------------------
   // Helper: "is entry with age `a` strictly older than entry with age `b`?"
@@ -144,7 +144,7 @@ package iq_pkg;
   // ---------------------------------------------------------------------------
   function automatic logic age_older_than(input logic [AGE_WIDTH-1:0] a,
                                            input logic [AGE_WIDTH-1:0] b);
-    return (a > b);
+    return (a > b);  // Returns 1 if entry 'a' has a higher age counter (older) than entry 'b'
   endfunction
 
   // ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ package iq_pkg;
   function automatic logic is_ready(input iq_entry_t e);
 
     // AND-reduction — &src_ready is 1 iff every bit is set.
-    return e.valid & (&e.src_ready);
+    return e.valid & (&e.src_ready);  // Ready to issue only if entry is valid and all required source operands are ready
   endfunction
 
 endpackage : iq_pkg

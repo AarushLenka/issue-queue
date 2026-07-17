@@ -152,14 +152,14 @@ module iq_top #(
     // =========================================================================
 
     // Per-entry state from the wakeup CAM.
-    iq_pkg::iq_entry_t  entry_array [DEPTH];
-    logic [DEPTH-1:0]   ready_array;
+    iq_pkg::iq_entry_t  entry_array [DEPTH];  // Array holding the full state (struct) of every entry in the queue
+    logic [DEPTH-1:0]   ready_array;          // Bitvector where bit i=1 if entry i is valid and all its sources are ready
 
     // Selector outputs.
-    logic [NUM_PORTS-1:0]                  sel_grant;
-    logic [NUM_PORTS-1:0][IDX_W-1:0]       sel_idx;
-    logic [NUM_PORTS-1:0][TAG_WIDTH-1:0]   sel_tag;
-    logic [NUM_PORTS-1:0][AGE_WIDTH-1:0]   sel_age;
+    logic [NUM_PORTS-1:0]                  sel_grant; // High if the respective port has granted an instruction for issue
+    logic [NUM_PORTS-1:0][IDX_W-1:0]       sel_idx;   // The slot index of the instruction selected by each port
+    logic [NUM_PORTS-1:0][TAG_WIDTH-1:0]   sel_tag;   // The destination tag of the instruction selected by each port
+    logic [NUM_PORTS-1:0][AGE_WIDTH-1:0]   sel_age;   // The age of the instruction selected by each port
 
     // =========================================================================
     // Free-slot allocator (priority encoder)
@@ -168,9 +168,9 @@ module iq_top #(
     // each cycle based on dispatch (consumes a slot) and issue/squash
     // (frees slots). The priority encoder finds the lowest-indexed 1-bit.
 
-    logic [DEPTH-1:0] free_vec;
-    logic [IDX_W-1:0] alloc_idx;    // lowest free slot index
-    logic             has_free;     // at least one slot is free
+    logic [DEPTH-1:0] free_vec;     // Bitvector tracking availability of IQ slots (1 = free/invalid, 0 = occupied)
+    logic [IDX_W-1:0] alloc_idx;    // lowest free slot index, output from the priority encoder
+    logic             has_free;     // at least one slot is free, indicated by reduction OR of free_vec
 
     // Priority encoder: find the lowest set bit in free_vec.
     // This is a standard "find-first-one" pattern. We walk from bit 0 upward
@@ -206,7 +206,7 @@ module iq_top #(
     //
     // The counter is NOT reset on squash — only on full pipeline reset.
     // This preserves ordering for surviving entries across partial flushes.
-    logic [15:0] disp_seq_r;
+    logic [15:0] disp_seq_r; // 16-bit monotonic sequence counter to maintain global dispatch order for squashing
 
     always_ff @(posedge clk or negedge rst_n) begin : disp_seq_counter
         if (!rst_n)

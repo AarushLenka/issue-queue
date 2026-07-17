@@ -136,7 +136,7 @@ module iq_wakeup_cam #(
     // shorter critical path.
 
     // Dispatch write-enable: one-hot, bit i = 1 means entry i is the target.
-    logic [DEPTH-1:0] dispatch_we_oh;
+    logic [DEPTH-1:0] dispatch_we_oh; // One-hot vector identifying the specific IQ slot being written to this cycle
 
     always_comb begin : dispatch_decode
         dispatch_we_oh = '0;
@@ -147,8 +147,9 @@ module iq_wakeup_cam #(
     // Issue clear: OR-reduction across all ports. An entry can be issued by
     // at most one port per cycle (enforced by the selector's mutual-exclusion
     // logic in Step 3), but we OR all ports' contributions here defensively.
+    // OR all ports' contributions here defensively.
     // If port p selects entry i, issue_clear_oh[i] goes high.
-    logic [DEPTH-1:0] issue_clear_oh;
+    logic [DEPTH-1:0] issue_clear_oh; // One-hot (or multi-hot) vector indicating which entries are being issued and thus cleared
 
     always_comb begin : issue_decode
         issue_clear_oh = '0;
@@ -187,8 +188,9 @@ module iq_wakeup_cam #(
     //   16 bits gives 65536 dispatches before wraparound — at 1 dispatch/cycle
     //   and 1 GHz, that's 65 µs. A full pipeline flush on wrap (or modular
     //   arithmetic with half-range comparison) handles this edge case.
+    //   arithmetic with half-range comparison) handles this edge case.
     // =========================================================================
-    logic [DEPTH-1:0] squash_clear_oh;
+    logic [DEPTH-1:0] squash_clear_oh; // Bitvector indicating which entries are younger than the mispredicted branch and must be flushed
 
     always_comb begin : squash_decode
         for (int i = 0; i < DEPTH; i++) begin
@@ -221,7 +223,7 @@ module iq_wakeup_cam #(
     //   - squash_clear per-entry from squash_clear_oh (Step 5): only entries
     //     whose disp_seq is strictly > squash_seq are gated.
 
-    genvar gi;
+    genvar gi; // Generate variable used to stamp out DEPTH instances of iq_entry at elaboration time
     generate
         for (gi = 0; gi < DEPTH; gi++) begin : gen_entry
             iq_entry #(

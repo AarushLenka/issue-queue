@@ -124,9 +124,9 @@ module iq_select #(
     // Internal struct to carry a candidate through the tree. Not in the package
     // because it's local to the selector's implementation detail.
     typedef struct packed {
-        logic                valid;         // is this candidate real?
-        logic [IDX_W-1:0]   idx;           // which entry
-        logic [AGE_WIDTH-1:0] age;          // for comparison
+        logic                valid;         // 1 if this candidate represents a real, ready instruction; 0 if padding or invalid
+        logic [IDX_W-1:0]   idx;           // the physical slot index of this instruction in the issue queue
+        logic [AGE_WIDTH-1:0] age;          // the age counter used to prioritize older instructions during selection
     } candidate_t;
 
     // pick_older: the pairwise comparator node. Given two candidates, return
@@ -176,10 +176,10 @@ module iq_select #(
         // For DEPTH>32, increase this. The unused slots are filled with
         // invalid candidates and don't affect the result — they lose every
         // comparison.
-        localparam int unsigned TREE_SIZE = 32;  // must be >= DEPTH and a power of 2
+        localparam int unsigned TREE_SIZE = 32;  // Size of the binary tree array; must be >= DEPTH and a power of 2 for complete reduction
 
-        candidate_t tree [TREE_SIZE];
-        int half;
+        candidate_t tree [TREE_SIZE]; // Array of candidates forming the tournament bracket nodes
+        int half; // Variable to control the reduction loop by halving the active tree size per level
 
         // Initialize leaves: real entries from the mask, padding with invalids.
         for (int i = 0; i < TREE_SIZE; i++) begin
@@ -251,8 +251,8 @@ module iq_select #(
     always_comb begin : multi_port_select
         // Per-port local variables. `automatic` is implicit inside always_comb
         // for SystemVerilog, but we declare them at the top for clarity.
-        logic [DEPTH-1:0] current_mask;
-        candidate_t       winner;
+        logic [DEPTH-1:0] current_mask; // Bitmask of which entries are still eligible to be selected (1=ready and not yet granted)
+        candidate_t       winner;       // The candidate selected by the priority tree for the current port
 
         // Start with all ready entries eligible.
         current_mask = ready_i;
