@@ -1,16 +1,16 @@
-# Graph Report - issue-queue  (2026-07-14)
+# Graph Report - issue-queue  (2026-07-17)
 
 ## Corpus Check
-- 18 files · ~19,020 words
+- 18 files · ~20,697 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 78 nodes · 61 edges · 18 communities (11 shown, 7 thin omitted)
+- 93 nodes · 76 edges · 19 communities (13 shown, 6 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c6cba4e2`
+- Built from commit: `086b679b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -30,18 +30,19 @@
 - graphify.md
 - README.md
 - iq_assertions.sv
+- How to Simulate
 
 ## God Nodes (most connected - your core abstractions)
 1. `Build order — follow these steps in sequence, don't skip ahead` - 11 edges
 2. `CLAUDE.md — Issue Queue (RTL Design Project)` - 10 edges
-3. `iq_select` - 3 edges
-4. `iq_top` - 3 edges
-5. `tb_iq_top_random` - 2 edges
-6. `What this project is` - 2 edges
-7. `iq_entry` - 1 edges
-8. `iq_wakeup_cam` - 1 edges
-9. `iq_select` - 1 edges
-10. `iq_wakeup_cam` - 1 edges
+3. `Out-of-Order Parametric Issue Queue (IQ)` - 7 edges
+4. `Deep Dive: Key Microarchitectural Mechanisms` - 4 edges
+5. `Verification Strategy` - 4 edges
+6. `How to Simulate` - 4 edges
+7. `iq_select` - 3 edges
+8. `iq_top` - 3 edges
+9. `tb_iq_top_random` - 2 edges
+10. `What this project is` - 2 edges
 
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
@@ -53,7 +54,7 @@
 - 1-file cycle: `tb/tb_iq_top_random.sv -> tb/tb_iq_top_random.sv`
 - 1-file cycle: `tb/tb_iq_wakeup_cam.sv -> tb/tb_iq_wakeup_cam.sv`
 
-## Communities (18 total, 7 thin omitted)
+## Communities (19 total, 6 thin omitted)
 
 ### Community 0 - "tb_iq_entry.sv"
 Cohesion: 0.29
@@ -87,17 +88,27 @@ Nodes (11): Build order — follow these steps in sequence, don't skip ahead, St
 Cohesion: 0.40
 Nodes (4): iq_top, iq_tx, iq_pkg, tb_iq_top_random
 
+### Community 16 - "README.md"
+Cohesion: 0.15
+Nodes (12): 1. Age-Based Selection, 2. Speculative Wakeup & The Replay Problem, 3. Branch Squashing, Block Diagram, Codebase Architecture, Constrained-Random & Functional Coverage, Deep Dive: Key Microarchitectural Mechanisms, Directed Testing (+4 more)
+
+### Community 18 - "How to Simulate"
+Cohesion: 0.50
+Nodes (4): 1. Run Directed Tests, 2. Run Constrained-Random Coverage Simulation, 3. Clean Temp Files, How to Simulate
+
 ## Knowledge Gaps
-- **50 isolated node(s):** `iq_entry`, `iq_wakeup_cam`, `iq_select`, `iq_wakeup_cam`, `iq_assertions` (+45 more)
+- **61 isolated node(s):** `iq_entry`, `iq_wakeup_cam`, `iq_select`, `iq_wakeup_cam`, `iq_assertions` (+56 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Build order — follow these steps in sequence, don't skip ahead` connect `Build order — follow these steps in sequence, don't skip ahead` to `CLAUDE.md — Issue Queue (RTL Design Project)`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
 - **Why does `CLAUDE.md — Issue Queue (RTL Design Project)` connect `CLAUDE.md — Issue Queue (RTL Design Project)` to `Build order — follow these steps in sequence, don't skip ahead`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
+- **Why does `Out-of-Order Parametric Issue Queue (IQ)` connect `README.md` to `How to Simulate`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `iq_entry`, `iq_wakeup_cam`, `iq_select` to the rest of the system?**
-  _50 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _61 weakly-connected nodes found - possible documentation gaps or missing edges._

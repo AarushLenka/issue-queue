@@ -20,13 +20,77 @@ A high-performance, parametric SystemVerilog implementation of an Out-of-Order (
 
 ```mermaid
 graph TD
-    Dispatch[Dispatch Bus: dst, src tags, age, imm] -->|Allocate| EntryArray[iq_entry.sv Storage Array]
-    WakeupBus[Wakeup Bus: valid, tag] -->|Parallel CAM Match| CAM[iq_wakeup_cam.sv]
-    SpecWakeupBus[Speculative Wakeup Bus: valid, tag] -->|Parallel Spec CAM Match| CAM
-    CAM -->|Update Src Ready| EntryArray
-    EntryArray -->|Ready Array & Age Status| Select[iq_select.sv Age-Based Arbiter]
-    Select -->|Grant / Select Index| IssueBus[Issue Bus: valid, tag, age]
-    SquashBus[Squash Bus: en, seq] -.->|Selective Flush| EntryArray
+    %% Define styles for clarity
+    classDef interface fill:#e6f3ff,stroke:#4b8bdf,stroke-width:2px,color:#333;
+    classDef module fill:#eaf4ea,stroke:#5bbd5b,stroke-width:2px,color:#333;
+    classDef submod fill:#fffbe6,stroke:#dfc34b,stroke-width:2px,color:#333;
+    classDef external fill:#f3e6ff,stroke:#9b4bdf,stroke-width:2px,color:#333;
+    
+    subgraph iq_pkg ["iq_pkg.sv (Global Types & Params)"]
+        PKG_Types["Parameters: DEPTH, TAG_WIDTH, NUM_SRC<br/>Struct: iq_entry_t<br/>Helpers: age_older_than(), is_ready()"]
+    end
+    class iq_pkg interface
+
+    subgraph iq_if ["iq_if.sv (Bus Interface)"]
+        IF_Modports["Modports: dispatch_mp, wakeup_mp, issue_mp, iq_mp<br/>Bundles the external connection signals"]
+    end
+    class iq_if interface
+
+    subgraph iq_top ["iq_top.sv (Top-Level)"]
+        direction TB
+        
+        Disp_Alloc["Free-Slot Allocator<br/>(Priority Encoder on free_vec)"]
+        Disp_Seq["Global Dispatch Sequence<br/>(disp_seq_r)"]
+        
+        subgraph iq_wakeup_cam ["iq_wakeup_cam.sv (Wakeup Broadcast Array)"]
+            direction TB
+            CAM_Decoders["One-Hot Decoders<br/>(dispatch_we, issue_clear, squash_clear)"]
+            
+            subgraph EntryArray ["DEPTH x iq_entry.sv (Entry Storage)"]
+                direction LR
+                Entry0["Entry 0<br/>State: iq_entry_t<br/>Comparators: wakeup_hit"]
+                Entry1["Entry 1..."]
+                EntryN["Entry DEPTH-1"]
+                Entry0 -.- Entry1 -.- EntryN
+            end
+            CAM_Decoders --> |"we, clear, squash_clear"| EntryArray
+        end
+        
+        subgraph iq_select ["iq_select.sv (Age-Based Arbiter)"]
+            direction TB
+            Tree["Priority-Tree Tournament<br/>find_oldest_ready()"]
+            Mask["Multi-Port Masking Logic"]
+            Tree --> Mask
+        end
+
+        Disp_Alloc -->|"alloc_idx"| iq_wakeup_cam
+        Disp_Seq -->|"disp_seq"| iq_wakeup_cam
+        
+        iq_wakeup_cam -->|"entry_array_o, ready_array_o"| iq_select
+        iq_select -->|"issue_grant, issue_idx"| iq_wakeup_cam
+    end
+    class iq_top,iq_wakeup_cam,iq_select,EntryArray module
+    class Disp_Alloc,Disp_Seq,CAM_Decoders,Tree,Mask submod
+
+    %% External Connections
+    EXT_Dispatch[/"Dispatch Unit"/] -->|"dispatch_valid, dst_tag, src_tag, imm"| iq_top
+    iq_top -->|"dispatch_ready, slot_idx"| EXT_Dispatch
+    class EXT_Dispatch external
+
+    EXT_Wakeup[/"Execution/Writeback"/] -->|"wakeup_valid, wakeup_tag<br/>spec_wakeup_valid, spec_wakeup_tag"| iq_top
+    class EXT_Wakeup external
+    
+    EXT_Squash[/"Commit/Branch Unit"/] -->|"squash_en, squash_seq"| iq_top
+    class EXT_Squash external
+
+    iq_top -->|"issue_valid, issue_idx, dst_tag, age"| EXT_Issue[/"Execution Units"/]
+    class EXT_Issue external
+
+    %% Dependencies
+    iq_pkg -.-> |"Imports"| iq_top
+    iq_pkg -.-> |"Imports"| iq_wakeup_cam
+    iq_pkg -.-> |"Imports"| iq_select
+    iq_pkg -.-> |"Imports"| EntryArray
 ```
 
 ---
