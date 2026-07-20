@@ -17,10 +17,5 @@
   "15": "graphify.md",
   "16": "README.md",
   "17": "iq_assertions.sv",
-  "18": "How to Simulate",
-  "19": "`iq_pkg.sv` — Issue Queue Package Reference",
-  "20": "2. In-Depth Algorithmic Walkthrough",
-  "21": "`iq_top.sv` — Top-Level Integration Reference",
-  "22": "`iq_wakeup_cam.sv` — Wakeup CAM Array Reference",
-  "23": "2. Walkthrough of Internal Logic Blocks"
+  "18": "How to Simulate"
 }

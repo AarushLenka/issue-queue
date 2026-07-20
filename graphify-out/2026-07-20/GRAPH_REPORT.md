@@ -1,11 +1,11 @@
-# Graph Report - issue-queue  (2026-07-20)
+# Graph Report - issue-queue  (2026-07-18)
 
 ## Corpus Check
-- 24 files · ~18,581 words
+- 18 files · ~16,508 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 150 nodes · 127 edges · 24 communities (18 shown, 6 thin omitted)
+- 93 nodes · 76 edges · 19 communities (13 shown, 6 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -31,23 +31,18 @@
 - README.md
 - iq_assertions.sv
 - How to Simulate
-- `iq_pkg.sv` — Issue Queue Package Reference
-- 2. In-Depth Algorithmic Walkthrough
-- `iq_top.sv` — Top-Level Integration Reference
-- `iq_wakeup_cam.sv` — Wakeup CAM Array Reference
-- 2. Walkthrough of Internal Logic Blocks
 
 ## God Nodes (most connected - your core abstractions)
 1. `Build order — follow these steps in sequence, don't skip ahead` - 11 edges
 2. `CLAUDE.md — Issue Queue (RTL Design Project)` - 10 edges
 3. `Out-of-Order Parametric Issue Queue (IQ)` - 7 edges
-4. ``iq_if.sv` — Issue Queue Bus Interface Reference` - 5 edges
-5. `3. Modports (Restricted Interface Views)` - 5 edges
-6. ``iq_pkg.sv` — Issue Queue Package Reference` - 5 edges
-7. `2. In-Depth Algorithmic Walkthrough` - 5 edges
-8. ``iq_top.sv` — Top-Level Integration Reference` - 5 edges
-9. ``iq_wakeup_cam.sv` — Wakeup CAM Array Reference` - 5 edges
-10. `Deep Dive: Key Microarchitectural Mechanisms` - 4 edges
+4. `Deep Dive: Key Microarchitectural Mechanisms` - 4 edges
+5. `Verification Strategy` - 4 edges
+6. `How to Simulate` - 4 edges
+7. `iq_select` - 3 edges
+8. `iq_top` - 3 edges
+9. `tb_iq_top_random` - 2 edges
+10. `What this project is` - 2 edges
 
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
@@ -59,7 +54,7 @@
 - 1-file cycle: `tb/tb_iq_top_random.sv -> tb/tb_iq_top_random.sv`
 - 1-file cycle: `tb/tb_iq_wakeup_cam.sv -> tb/tb_iq_wakeup_cam.sv`
 
-## Communities (24 total, 6 thin omitted)
+## Communities (19 total, 6 thin omitted)
 
 ### Community 0 - "tb_iq_entry.sv"
 Cohesion: 0.29
@@ -94,35 +89,15 @@ Cohesion: 0.40
 Nodes (4): iq_top, iq_tx, iq_pkg, tb_iq_top_random
 
 ### Community 16 - "README.md"
-Cohesion: 0.12
-Nodes (16): 1. Age-Based Selection, 1. Run Directed Tests, 2. Run Constrained-Random Coverage Simulation, 2. Speculative Wakeup & The Replay Problem, 3. Branch Squashing, 3. Clean Temp Files, Block Diagram, Codebase Architecture (+8 more)
+Cohesion: 0.15
+Nodes (12): 1. Age-Based Selection, 2. Speculative Wakeup & The Replay Problem, 3. Branch Squashing, Block Diagram, Codebase Architecture, Constrained-Random & Functional Coverage, Deep Dive: Key Microarchitectural Mechanisms, Directed Testing (+4 more)
 
 ### Community 18 - "How to Simulate"
-Cohesion: 0.15
-Nodes (12): 1. `dispatch_mp` (For the Dispatch Unit), 1. Parameters, 2. Signal Breakdown, 2. `wakeup_mp` (For the Writeback/Wakeup Source), 3. `issue_mp` (For the Execution Units), 3. Modports (Restricted Interface Views), 4. How it Connects to Other Files, 4. `iq_mp` (For the Issue Queue Top-Level `iq_top`) (+4 more)
-
-### Community 19 - "`iq_pkg.sv` — Issue Queue Package Reference"
-Cohesion: 0.22
-Nodes (8): 1. Parameters (Configuration Variables), 2. Structure: `iq_entry_t`, 3. Helper Functions, 4. How it Connects to Other Files, Function: `age_older_than`, Function: `is_ready`, `iq_pkg.sv` — Issue Queue Package Reference, Struct Field Breakdown
-
-### Community 20 - "2. In-Depth Algorithmic Walkthrough"
-Cohesion: 0.22
-Nodes (8): 1. Port Interface Signals, 1. The Candidate Struct (`candidate_t`), 2. In-Depth Algorithmic Walkthrough, 2. Pairwise Comparator Node (`pick_older`), 3. Connections to Other Modules, 3. Tournament reduction tree (`find_oldest_ready`), 4. Multi-Port Allocation & Mutual Exclusion (`multi_port_select`), `iq_select.sv` — Age-Ordered Selector Reference
-
-### Community 21 - "`iq_top.sv` — Top-Level Integration Reference"
-Cohesion: 0.22
-Nodes (8): 1. External Port Interface, 2. Internal Signals & Wires, 3. Walkthrough of Control Blocks, 4. Submodule Wiring, Block 1: Free Slot Allocator (`find_free_slot`), Block 2: Global Ticket Counter (`disp_seq_counter`), Block 3: Allocation Map Updater (`free_vec_update`), `iq_top.sv` — Top-Level Integration Reference
-
-### Community 22 - "`iq_wakeup_cam.sv` — Wakeup CAM Array Reference"
-Cohesion: 0.22
-Nodes (8): 1. Dispatch Slot Decoder (`dispatch_decode`), 1. Port Interface Signals, 2. Internal Signals & Decoding Logic, 2. Issue Port Clear Decoder (`issue_decode`), 3. Generative Instantiation Loop (`gen_entry`), 3. Pipeline Squash Decoder (`squash_decode`), 4. Connections to Other Modules, `iq_wakeup_cam.sv` — Wakeup CAM Array Reference
-
-### Community 23 - "2. Walkthrough of Internal Logic Blocks"
-Cohesion: 0.25
-Nodes (7): 1. Interface Signals, 2. Walkthrough of Internal Logic Blocks, 3. Connections to Other Modules, Block 1: Same-Cycle Dispatch & Wakeup Bypass (`src_tag_eff_calc`), Block 2: Wakeup Comparators (`wakeup_compare`), Block 3: Sequential State Machine (`entry_state`), `iq_entry.sv` — Individual Queue Slot Reference
+Cohesion: 0.50
+Nodes (4): 1. Run Directed Tests, 2. Run Constrained-Random Coverage Simulation, 3. Clean Temp Files, How to Simulate
 
 ## Knowledge Gaps
-- **98 isolated node(s):** `iq_entry`, `iq_wakeup_cam`, `iq_select`, `iq_wakeup_cam`, `iq_assertions` (+93 more)
+- **61 isolated node(s):** `iq_entry`, `iq_wakeup_cam`, `iq_select`, `iq_wakeup_cam`, `iq_assertions` (+56 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -130,10 +105,10 @@ Nodes (7): 1. Interface Signals, 2. Walkthrough of Internal Logic Blocks, 3. Con
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Build order — follow these steps in sequence, don't skip ahead` connect `Build order — follow these steps in sequence, don't skip ahead` to `CLAUDE.md — Issue Queue (RTL Design Project)`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
 - **Why does `CLAUDE.md — Issue Queue (RTL Design Project)` connect `CLAUDE.md — Issue Queue (RTL Design Project)` to `Build order — follow these steps in sequence, don't skip ahead`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
+- **Why does `Out-of-Order Parametric Issue Queue (IQ)` connect `README.md` to `How to Simulate`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `iq_entry`, `iq_wakeup_cam`, `iq_select` to the rest of the system?**
-  _98 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `README.md` be split into smaller, more focused modules?**
-  _Cohesion score 0.11764705882352941 - nodes in this community are weakly interconnected._
+  _61 weakly-connected nodes found - possible documentation gaps or missing edges._

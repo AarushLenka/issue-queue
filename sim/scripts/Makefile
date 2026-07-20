@@ -15,6 +15,7 @@ FILELIST  := sim/scripts/filelist.f
 XRUN      := xrun
 SVFLAGS   := -sv -64bit -access +rwc -incdir rtl -timescale 1ns/1ps
 ELAB_ONLY := -elaborate
+GUI := -gui
 
 # =============================================================================
 # Targets
